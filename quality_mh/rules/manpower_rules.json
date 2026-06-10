@@ -1,0 +1,43 @@
+{
+  "revision": "1.0",
+  "rules": [
+    {
+      "rule_id": "MP-HEADCOUNT-BASE",
+      "revision": "1.0",
+      "category": "표준인원",
+      "sub_category": "환산",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "headcount = total_mh / (annual_work_minutes * utilization_rate)",
+      "parameters": {
+        "annual_work_minutes": "RULE_NOT_CONFIRMED",
+        "utilization_rate": "RULE_NOT_CONFIRMED",
+        "rounding_rule": "RULE_NOT_CONFIRMED"
+      },
+      "source_file": "Layer1 PPT + Layer4 종합 MH",
+      "source_sheet": "표준인원",
+      "source_range": "",
+      "status": "RULE_NOT_CONFIRMED",
+      "verified_by": "",
+      "remarks": "인원 환산 분모/근무시간/반올림 기준 미확정 - placeholder"
+    },
+    {
+      "rule_id": "MP-MH-SUM",
+      "revision": "1.0",
+      "category": "표준인원",
+      "sub_category": "MH집계",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "total_mh = sum(mh_value)",
+      "parameters": {
+        "group_by": ["factory_name", "line_name"]
+      },
+      "source_file": "Layer4 종합 MH",
+      "source_sheet": "",
+      "source_range": "",
+      "status": "CONFIRMED",
+      "verified_by": "",
+      "remarks": "라인별 MH 합산"
+    }
+  ]
+}

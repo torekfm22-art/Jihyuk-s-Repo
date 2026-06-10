@@ -1,0 +1,115 @@
+{
+  "revision": "1.0",
+  "rules": [
+    {
+      "rule_id": "UT-MOVEMENT-BASE",
+      "revision": "1.0",
+      "category": "단위시간",
+      "sub_category": "이동시간",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "steps = distance_m / step_length_m; time_min = steps_to_mod(steps) * mod_to_minutes",
+      "parameters": {
+        "step_length_m": 0.6,
+        "mod_to_minutes": 0.129,
+        "steps_to_mod_rule": "RULE_NOT_CONFIRMED"
+      },
+      "source_file": "Layer3 모답스 동작 분석 자료",
+      "source_sheet": "이동시간",
+      "source_range": "",
+      "status": "NEEDS_REVIEW",
+      "verified_by": "",
+      "remarks": "걸음수→MOD 변환 규칙 미확정. steps_to_mod 미확정 시 이동시간 NEEDS_REVIEW"
+    },
+    {
+      "rule_id": "UT-MOVEMENT-HEAVY",
+      "revision": "1.0",
+      "category": "단위시간",
+      "sub_category": "이동시간_중량물",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "steps = distance_m / step_length_m; time_min = steps_to_mod_heavy(steps, weight_kg) * mod_to_minutes",
+      "parameters": {
+        "step_length_m": 0.6,
+        "mod_to_minutes": 0.129,
+        "heavy_threshold_kg": 20,
+        "steps_to_mod_heavy_rule": "RULE_NOT_CONFIRMED"
+      },
+      "source_file": "Layer3 모답스 동작 분석 자료",
+      "source_sheet": "이동시간",
+      "source_range": "",
+      "status": "RULE_NOT_CONFIRMED",
+      "verified_by": "",
+      "remarks": "중량물(+20kg) 이동 구분 확인 - MOD 변환 규칙 미확정"
+    },
+    {
+      "rule_id": "UT-ACTION-MOD",
+      "revision": "1.0",
+      "category": "단위시간",
+      "sub_category": "동작시간",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "labor_subtotal = mod_value * (1 + auxiliary_rate); time_min = labor_subtotal * mod_to_minutes",
+      "parameters": {
+        "mod_to_minutes": 0.129,
+        "default_auxiliary_rate": null
+      },
+      "source_file": "Layer3 모답스 동작 분석 자료",
+      "source_sheet": "동작분석",
+      "source_range": "",
+      "status": "CONFIRMED",
+      "verified_by": "",
+      "remarks": "MOD + 보조공수 → 공수소계 → 분 환산 구조 확인"
+    },
+    {
+      "rule_id": "UT-WAIT-MEASURED",
+      "revision": "1.0",
+      "category": "단위시간",
+      "sub_category": "대기시간",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "time_min = measured_wait_sec / 60",
+      "parameters": {},
+      "source_file": "Layer3 모답스 동작 분석 자료",
+      "source_sheet": "대기시간",
+      "source_range": "",
+      "status": "CONFIRMED",
+      "verified_by": "",
+      "remarks": "실측 대기시간(초) → 분 환산"
+    },
+    {
+      "rule_id": "UT-WAIT-CYCLE",
+      "revision": "1.0",
+      "category": "단위시간",
+      "sub_category": "대기시간_사이클",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "time_min = cycle_count * cycle_time_min",
+      "parameters": {
+        "cycle_time_min": "RULE_NOT_CONFIRMED"
+      },
+      "source_file": "Layer3 모답스 동작 분석 자료",
+      "source_sheet": "대기시간",
+      "source_range": "",
+      "status": "RULE_NOT_CONFIRMED",
+      "verified_by": "",
+      "remarks": "작동대기(1 Cycle/2 Cycle) 구조 확인 - cycle_time 미확정"
+    },
+    {
+      "rule_id": "UT-TOTAL-SUM",
+      "revision": "1.0",
+      "category": "단위시간",
+      "sub_category": "합산",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "unit_time_min = movement_min + action_min + wait_min",
+      "parameters": {},
+      "source_file": "Layer3+4",
+      "source_sheet": "",
+      "source_range": "",
+      "status": "CONFIRMED",
+      "verified_by": "",
+      "remarks": "이동+동작+대기 합산 구조"
+    }
+  ]
+}

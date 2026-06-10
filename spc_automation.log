@@ -1,0 +1,148 @@
+2026-06-02 13:19:23,909 [INFO] === SPC 파이프라인 시작: mes_sample_data.xlsx ===
+2026-06-02 13:19:24,060 [INFO] Excel 추출 완료: mes_sample_data.xlsx (200행)
+2026-06-02 13:19:24,063 [INFO] 필터 적용 후 34행
+2026-06-02 13:19:24,064 [INFO] subgroup 채취: 6개 subgroup × n=5 = 30개
+2026-06-02 13:19:24,768 [INFO] 보고서 생성 완료: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\spc_report_20260602_131924.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\spc_report_20260602_131924.docx
+2026-06-02 13:19:24,768 [INFO] === SPC 파이프라인 완료 ===
+2026-06-02 13:20:53,844 [INFO] === SPC 파이프라인 시작 (xlsx): MES=mes_data.xlsx, QMS=qms_data.xlsx ===
+2026-06-02 13:20:54,000 [INFO] MES xlsx 추출: mes_data.xlsx (150행, 시트=0)
+2026-06-02 13:20:54,009 [INFO] QMS xlsx 추출: qms_data.xlsx (100행, 시트=0)
+2026-06-02 13:20:54,009 [INFO] MES/QMS xlsx 병합 완료: 총 250행
+2026-06-02 13:20:54,012 [INFO] 필터 적용 후 87행
+2026-06-02 13:20:54,013 [INFO] subgroup 채취: 17개 subgroup × n=5 = 85개
+2026-06-02 13:20:54,644 [INFO] 보고서 생성 완료: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\spc_report_20260602_132054.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\spc_report_20260602_132054.docx
+2026-06-02 13:20:54,644 [INFO] === SPC 파이프라인 완료 ===
+2026-06-02 13:27:24,443 [INFO] === SPC 파이프라인 시작 (xlsx): MES=mes_data.xlsx, QMS=qms_data.xlsx ===
+2026-06-02 13:27:24,603 [INFO] MES xlsx 추출: mes_data.xlsx (150행, 시트=0)
+2026-06-02 13:27:24,611 [INFO] QMS xlsx 추출: qms_data.xlsx (100행, 시트=0)
+2026-06-02 13:27:24,612 [INFO] MES/QMS xlsx 병합 완료: 총 250행
+2026-06-02 13:27:24,615 [INFO] 필터 적용 후 87행
+2026-06-02 13:27:24,615 [INFO] subgroup 채취: 17개 subgroup × n=5 = 85개
+2026-06-02 13:27:25,239 [INFO] 보고서 생성 완료: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\spc_report_20260602_132725.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\spc_report_20260602_132725.docx
+2026-06-02 13:27:25,239 [INFO] === SPC 파이프라인 완료 ===
+2026-06-02 13:28:10,777 [INFO] === SPC 파이프라인 시작 (xlsx): MES=mes_data.xlsx, QMS=qms_data.xlsx ===
+2026-06-02 13:28:10,926 [INFO] MES xlsx 추출: mes_data.xlsx (150행, 시트=0)
+2026-06-02 13:28:10,934 [INFO] QMS xlsx 추출: qms_data.xlsx (100행, 시트=0)
+2026-06-02 13:28:10,934 [INFO] MES/QMS xlsx 병합 완료: 총 250행
+2026-06-02 13:28:10,937 [INFO] 필터 적용 후 87행
+2026-06-02 13:28:10,938 [INFO] subgroup 채취: 17개 subgroup × n=5 = 85개
+2026-06-02 13:28:11,550 [INFO] 보고서 생성 완료: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\spc_report_20260602_132811.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\spc_report_20260602_132811.docx
+2026-06-02 13:28:11,550 [INFO] === SPC 파이프라인 완료 ===
+2026-06-02 13:35:11,058 [INFO] === SPC 파이프라인 시작 (xlsx): MES=mes_data.xlsx, QMS=qms_data.xlsx ===
+2026-06-02 13:35:11,196 [INFO] MES xlsx 추출: mes_data.xlsx (150행, 시트=0)
+2026-06-02 13:35:11,203 [INFO] QMS xlsx 추출: qms_data.xlsx (100행, 시트=0)
+2026-06-02 13:35:11,204 [INFO] MES/QMS xlsx 병합 완료: 총 250행
+2026-06-02 13:35:11,207 [INFO] 필터 적용 후 87행
+2026-06-02 13:35:11,208 [INFO] subgroup 채취: 17개 subgroup × n=5 = 85개
+2026-06-02 13:35:11,796 [INFO] 보고서 생성 완료: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\spc_report_20260602_133511.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\spc_report_20260602_133511.docx
+2026-06-02 13:35:11,796 [INFO] === SPC 파이프라인 완료 ===
+2026-06-02 14:02:41,732 [INFO] MES xlsx 추출: mes_data.xlsx (150행, 시트=0)
+2026-06-02 14:02:41,740 [INFO] QMS xlsx 추출: qms_data.xlsx (100행, 시트=0)
+2026-06-02 14:02:41,741 [INFO] MES/QMS xlsx 병합 완료: 총 250행
+2026-06-02 14:02:41,744 [INFO] 필터 적용 후 87행
+2026-06-02 14:02:41,745 [INFO] subgroup 채취: 17개 subgroup × n=5 = 85개
+2026-06-02 14:02:42,784 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260602_140242.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260602_140242.pdf
+2026-06-02 14:05:32,458 [INFO] MES xlsx 추출: mes_data.xlsx (150행, 시트=0)
+2026-06-02 14:05:32,467 [INFO] QMS xlsx 추출: qms_data.xlsx (100행, 시트=0)
+2026-06-02 14:05:32,468 [INFO] MES/QMS xlsx 병합 완료: 총 250행
+2026-06-02 14:05:32,470 [INFO] 필터 적용 후 87행
+2026-06-02 14:05:32,471 [INFO] subgroup 채취: 17개 subgroup × n=5 = 85개
+2026-06-02 14:05:33,551 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260602_140533.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260602_140533.pdf
+2026-06-02 14:33:29,879 [INFO] 파일 형식 감지: mes_data.xlsx → xlsx
+2026-06-02 14:33:29,891 [INFO] mes_data 추출 (xlsx): mes_data.xlsx (150행, 시트=0)
+2026-06-02 14:33:29,891 [INFO] 파일 형식 감지: qms_data.xlsx → xlsx
+2026-06-02 14:33:29,900 [INFO] qms_data 추출 (xlsx): qms_data.xlsx (100행, 시트=0)
+2026-06-02 14:33:29,900 [INFO] Excel 파일 병합 완료: 총 250행
+2026-06-02 14:33:29,903 [INFO] 필터 적용 후 87행
+2026-06-02 14:33:29,903 [INFO] subgroup 채취: 17개 subgroup × n=5 = 85개
+2026-06-02 14:33:31,013 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260602_143330.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260602_143330.pdf
+2026-06-04 10:03:56,307 [INFO] 파일 형식 감지: mes_data.xlsx → xlsx
+2026-06-04 10:03:56,470 [INFO] mes_data 추출 (xlsx): mes_data.xlsx (150행, 시트=0)
+2026-06-04 10:03:56,471 [INFO] 파일 형식 감지: qms_data.xlsx → xlsx
+2026-06-04 10:03:56,479 [INFO] qms_data 추출 (xlsx): qms_data.xlsx (100행, 시트=0)
+2026-06-04 10:03:56,479 [INFO] Excel 파일 병합 완료: 총 250행
+2026-06-04 10:03:56,481 [INFO] 필터 적용 후 87행
+2026-06-04 10:03:56,490 [WARNING] 목표 25 subgroup → 4 subgroup (후보 4개)
+2026-06-04 10:03:56,491 [INFO] 랜덤 subgroup: 4군 × n=5, 사용 일자 1개 ['2026-05-01']
+2026-06-04 10:03:57,812 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_100357.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_100357.pdf
+2026-06-04 10:06:19,946 [INFO] 파일 형식 감지: mes_data.xlsx → xlsx
+2026-06-04 10:06:20,103 [INFO] mes_data 추출 (xlsx): mes_data.xlsx (150행, 시트=0)
+2026-06-04 10:06:20,104 [INFO] 파일 형식 감지: qms_data.xlsx → xlsx
+2026-06-04 10:06:20,112 [INFO] qms_data 추출 (xlsx): qms_data.xlsx (100행, 시트=0)
+2026-06-04 10:06:20,112 [INFO] Excel 파일 병합 완료: 총 250행
+2026-06-04 10:06:20,114 [INFO] 필터 적용 후 87행
+2026-06-04 10:06:20,123 [WARNING] 목표 25 subgroup → 4 subgroup (후보 4개)
+2026-06-04 10:06:20,123 [INFO] 랜덤 subgroup: 4군 × n=5, 사용 일자 1개 ['2026-05-01']
+2026-06-04 10:06:21,434 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_100621.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_100621.pdf
+2026-06-04 10:07:28,306 [INFO] 파일 형식 감지: mes_data.xlsx → xlsx
+2026-06-04 10:07:28,492 [INFO] mes_data 추출 (xlsx): mes_data.xlsx (150행, 시트=0)
+2026-06-04 10:07:28,493 [INFO] 파일 형식 감지: qms_data.xlsx → xlsx
+2026-06-04 10:07:28,504 [INFO] qms_data 추출 (xlsx): qms_data.xlsx (100행, 시트=0)
+2026-06-04 10:07:28,505 [INFO] Excel 파일 병합 완료: 총 250행
+2026-06-04 10:07:28,507 [INFO] 필터 적용 후 87행
+2026-06-04 10:07:28,517 [WARNING] 목표 25 subgroup → 4 subgroup (후보 4개)
+2026-06-04 10:07:28,518 [INFO] 랜덤 subgroup: 4군 × n=5, 사용 일자 1개 ['2026-05-01']
+2026-06-04 10:07:29,813 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_100729.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_100729.pdf
+2026-06-04 10:14:18,211 [INFO] 파일 형식 감지: mes_data.xlsx → xlsx
+2026-06-04 10:14:18,374 [INFO] mes_data 추출 (xlsx): mes_data.xlsx (150행, 시트=0)
+2026-06-04 10:14:18,375 [INFO] 파일 형식 감지: qms_data.xlsx → xlsx
+2026-06-04 10:14:18,384 [INFO] qms_data 추출 (xlsx): qms_data.xlsx (100행, 시트=0)
+2026-06-04 10:14:18,385 [INFO] Excel 파일 병합 완료: 총 250행
+2026-06-04 10:14:18,387 [INFO] 필터 적용 후 87행
+2026-06-04 10:14:18,396 [WARNING] 목표 25 subgroup → 4 subgroup (후보 4개)
+2026-06-04 10:14:18,396 [INFO] 랜덤 subgroup: 4군 × n=5, 사용 일자 1개 ['2026-05-01']
+2026-06-04 10:14:19,668 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_101419.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_101419.pdf
+2026-06-04 10:17:12,939 [INFO] 파일 형식 감지: mes_data.xlsx → xlsx
+2026-06-04 10:17:13,105 [INFO] mes_data 추출 (xlsx): mes_data.xlsx (150행, 시트=0)
+2026-06-04 10:17:13,106 [INFO] 파일 형식 감지: qms_data.xlsx → xlsx
+2026-06-04 10:17:13,115 [INFO] qms_data 추출 (xlsx): qms_data.xlsx (100행, 시트=0)
+2026-06-04 10:17:13,115 [INFO] Excel 파일 병합 완료: 총 250행
+2026-06-04 10:17:13,118 [INFO] 필터 적용 후 87행
+2026-06-04 10:17:13,126 [WARNING] 목표 25 subgroup → 4 subgroup (후보 4개)
+2026-06-04 10:17:13,126 [INFO] 랜덤 subgroup: 4군 × n=5, 사용 일자 1개 ['2026-05-01']
+2026-06-04 10:17:14,488 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_101714.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_101714.pdf
+2026-06-04 10:27:11,819 [INFO] 파일 형식 감지: mes_data.xlsx → xlsx
+2026-06-04 10:27:11,990 [INFO] mes_data 추출 (xlsx): mes_data.xlsx (150행, 시트=0)
+2026-06-04 10:27:11,990 [INFO] 파일 형식 감지: qms_data.xlsx → xlsx
+2026-06-04 10:27:11,999 [INFO] qms_data 추출 (xlsx): qms_data.xlsx (100행, 시트=0)
+2026-06-04 10:27:11,999 [INFO] Excel 파일 병합 완료: 총 250행
+2026-06-04 10:27:12,002 [INFO] 필터 적용 후 87행
+2026-06-04 10:27:12,010 [WARNING] 목표 25 subgroup → 4 subgroup (후보 4개)
+2026-06-04 10:27:12,010 [INFO] 랜덤 subgroup: 4군 × n=5, 사용 일자 1개 ['2026-05-01']
+2026-06-04 10:27:13,465 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_102713.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260604_102713.pdf
+2026-06-09 17:05:10,823 [INFO] 파일 형식 감지: mes_data.xlsx → xlsx
+2026-06-09 17:05:10,999 [INFO] mes_data 추출 (xlsx): mes_data.xlsx (150행, 시트=0)
+2026-06-09 17:05:10,999 [INFO] 파일 형식 감지: qms_data.xlsx → xlsx
+2026-06-09 17:05:11,017 [INFO] qms_data 추출 (xlsx): qms_data.xlsx (100행, 시트=0)
+2026-06-09 17:05:11,017 [INFO] Excel 파일 병합 완료: 총 250행
+2026-06-09 17:05:11,022 [INFO] 필터 적용 후 87행
+2026-06-09 17:05:11,037 [WARNING] 목표 25 subgroup → 4 subgroup (후보 4개)
+2026-06-09 17:05:11,037 [INFO] 랜덤 subgroup: 4군 × n=5, 사용 일자 1개 ['2026-05-01']
+2026-06-09 17:05:12,277 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260609_170511.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260609_170511.pdf
+2026-06-09 17:14:51,700 [INFO] 파일 형식 감지: mes_data.xlsx → xlsx
+2026-06-09 17:14:51,876 [INFO] mes_data 추출 (xlsx): mes_data.xlsx (150행, 시트=0)
+2026-06-09 17:14:51,877 [INFO] 파일 형식 감지: qms_data.xlsx → xlsx
+2026-06-09 17:14:51,895 [INFO] qms_data 추출 (xlsx): qms_data.xlsx (100행, 시트=0)
+2026-06-09 17:14:51,895 [INFO] Excel 파일 병합 완료: 총 250행
+2026-06-09 17:14:51,902 [INFO] 필터 적용 후 87행
+2026-06-09 17:14:51,918 [WARNING] 목표 25 subgroup → 4 subgroup (후보 4개)
+2026-06-09 17:14:51,919 [INFO] 랜덤 subgroup: 4군 × n=5, 사용 일자 1개 ['2026-05-01']
+2026-06-09 17:14:53,085 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260609_171452.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260609_171452.pdf
+2026-06-09 17:21:49,682 [INFO] 파일 형식 감지: mes_data.xlsx → xlsx
+2026-06-09 17:21:49,860 [INFO] mes_data 추출 (xlsx): mes_data.xlsx (150행, 시트=0)
+2026-06-09 17:21:49,860 [INFO] 파일 형식 감지: qms_data.xlsx → xlsx
+2026-06-09 17:21:49,877 [INFO] qms_data 추출 (xlsx): qms_data.xlsx (100행, 시트=0)
+2026-06-09 17:21:49,878 [INFO] Excel 파일 병합 완료: 총 250행
+2026-06-09 17:21:49,883 [INFO] 필터 적용 후 87행
+2026-06-09 17:21:49,898 [WARNING] 목표 25 subgroup → 4 subgroup (후보 4개)
+2026-06-09 17:21:49,899 [INFO] 랜덤 subgroup: 4군 × n=5, 사용 일자 1개 ['2026-05-01']
+2026-06-09 17:21:51,157 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260609_172150.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260609_172150.pdf
+2026-06-09 17:42:54,288 [INFO] 파일 형식 감지: mes_data.xlsx → xlsx
+2026-06-09 17:42:54,461 [INFO] mes_data 추출 (xlsx): mes_data.xlsx (150행, 시트=0)
+2026-06-09 17:42:54,462 [INFO] 파일 형식 감지: qms_data.xlsx → xlsx
+2026-06-09 17:42:54,481 [INFO] qms_data 추출 (xlsx): qms_data.xlsx (100행, 시트=0)
+2026-06-09 17:42:54,481 [INFO] Excel 파일 병합 완료: 총 250행
+2026-06-09 17:42:54,487 [INFO] 필터 적용 후 87행
+2026-06-09 17:42:54,503 [WARNING] 목표 25 subgroup → 4 subgroup (후보 4개)
+2026-06-09 17:42:54,504 [INFO] 랜덤 subgroup: 4군 × n=5, 사용 일자 1개 ['2026-05-01']
+2026-06-09 17:42:55,636 [INFO] 종합 보고서: C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260609_174255.xlsx, C:\Users\김지혁책임품질기획팀\Desktop\Github\data\output\SPC_종합보고서_20260609_174255.pdf

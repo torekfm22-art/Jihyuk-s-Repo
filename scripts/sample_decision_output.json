@@ -1,0 +1,71 @@
+{
+  "metadata": {
+    "chart_type": "xbar_s",
+    "subgroup_size": 5,
+    "sample_group_count": 25,
+    "stage": "mass_production",
+    "spec_type": "two_sided",
+    "special_characteristic": false,
+    "customer_exception_mode": false,
+    "process_change_detected": false
+  },
+  "verdict_summary": {
+    "process_stability": "안정",
+    "normality_verdict": "정규",
+    "capability_verdict": "충분",
+    "control_chart_deploy": "가능",
+    "priority_action": "현상 유지 + 추이 모니터링"
+  },
+  "control_chart": {
+    "is_stable": true,
+    "status": "stable",
+    "r_chart_status": null,
+    "mean_chart_status": "stable",
+    "detected_patterns": [],
+    "decision_log": [
+      {"rule_id": "STAGE_CAPABILITY", "message": "stage=mass_production -> CpCpk rule applied (threshold width=1.33, center=1.33)", "priority": 15},
+      {"rule_id": "CAPABILITY_SUFFICIENT", "message": "Cpk>=1.33 -> maintain and monitor", "priority": 40}
+    ],
+    "recommendation": "현 상태 유지, 정기 모니터링"
+  },
+  "normality": {
+    "test_name": "Shapiro-Wilk",
+    "statistic": 0.98,
+    "p_value": 0.15,
+    "is_normal": true,
+    "normality_state": "normal",
+    "handling_recommendation": "정규분포 가정 하에 공정능력 해석 가능"
+  },
+  "capability": {
+    "metric_basis": "CpCpk",
+    "cp": 1.5,
+    "cpk": 1.5,
+    "is_capable": true,
+    "capability_status": "sufficient",
+    "improvement_focus": "maintain_monitor",
+    "recommendation": "현재 상태 유지 + 추이 모니터링"
+  },
+  "compliance": {
+    "can_deploy_control_chart": "possible",
+    "requires_recollection": false,
+    "requires_process_improvement": false,
+    "requires_containment": false,
+    "priority_actions": ["현상 유지 + 추이 모니터링"]
+  },
+  "aiag_vda_extensions": {
+    "pre_control_recommendation": "X-bar 계열 운용 — Pre-control Chart는 보조 수단으로 검토",
+    "machine_capability_needed": false,
+    "machine_capability": {
+      "supported": false,
+      "message": "Cm/Cmk calculation module not implemented yet."
+    },
+    "report_completeness": {
+      "completeness_ok": true,
+      "missing_items": []
+    }
+  },
+  "expert_commentary": {
+    "executive_summary": "해석용 관리도 기준으로 공정이 통계적 안정 상태로 판단됩니다. 공정능력 지수가 내부 기준을 충족합니다.",
+    "field_operator_comment": "현재 데이터에서는 특별한 이상 신호가 없습니다. 기존 관리 방식을 유지하며 주기적으로 다시 확인하십시오."
+  }
+}

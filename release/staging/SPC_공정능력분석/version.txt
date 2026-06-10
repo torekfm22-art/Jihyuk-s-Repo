@@ -1,0 +1,6 @@
+product=SPC 怨듭젙?λ젰 遺꾩꽍
+version=1.0.0
+platform=Windows 64bit
+python_required=false
+built=20260604
+

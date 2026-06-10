@@ -1,0 +1,37 @@
+﻿양식 스캔: C:\Users\김지혁책임품질기획팀\Desktop\Github\templates\AIAG-VDA SPC REPORT 양식.xlsx
+(파란 글씨 셀 + 왼쪽/위 항목명 기준, 로컬만 처리)
+
+
+매핑 저장: C:\Users\김지혁책임품질기획팀\Desktop\Github\templates\AIAG-VDA SPC REPORT 양식.label_map.yaml
+설정 파일: C:\Users\김지혁책임품질기획팀\Desktop\Github\config\report_layout.yaml
+
+[Report(Eng ver.)]
+  analyzed_at          → Report(Eng ver.)!A7
+  characteristic       → Report(Eng ver.)!C9
+  chart_control        → Report(Eng ver.)!D15
+  chart_histogram      → Report(Eng ver.)!A13
+  chart_prob           → Report(Eng ver.)!A15
+  chart_raw            → Report(Eng ver.)!D13
+  collection_period    → Report(Eng ver.)!C7
+  cp                   → Report(Eng ver.)!E18
+  cp_B21               → Report(Eng ver.)!B21
+  cp_D19               → Report(Eng ver.)!D19
+  cpk                  → Report(Eng ver.)!G18
+  cpk_B22              → Report(Eng ver.)!B22
+  data_source          → Report(Eng ver.)!E3
+  distribution         → Report(Eng ver.)!E17
+  item                 → Report(Eng ver.)!A9
+  machine              → Report(Eng ver.)!C3
+  machine_id           → Report(Eng ver.)!C5
+  mean                 → Report(Eng ver.)!A17
+  operator             → Report(Eng ver.)!E5
+  pct_above_usl        → Report(Eng ver.)!F21
+  process              → Report(Eng ver.)!A3
+  process_id           → Report(Eng ver.)!A5
+  sample_n             → Report(Eng ver.)!B11
+  sampling_strategy    → Report(Eng ver.)!G11
+  spec_limits          → Report(Eng ver.)!E9
+  std_overall          → Report(Eng ver.)!C17
+  subgroup_size        → Report(Eng ver.)!D11
+
+다음: SPC 프로그램에서 「분석 실행」하면 이 양식에 값이 채워집니다.

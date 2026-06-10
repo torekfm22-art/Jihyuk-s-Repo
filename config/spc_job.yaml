@@ -1,0 +1,28 @@
+# SPC 분석 — Excel 파일 첨부 (1개 이상, MES/QMS 구분 없음)
+
+input_files:
+  - mes_data.xlsx
+  - qms_data.xlsx
+
+sheet_name: 0
+chart_type: xbar_s
+subgroup_size: 5
+n_subgroups: 25
+sampling_method: consecutive   # 일자 랜덤 · LOT·교대 블록 내 연속 5개 × 25군
+
+usl: 10.50
+lsl: 9.50
+
+filter_process: "조립공정"
+filter_characteristic: "외경"
+
+report_title: "SPC 및 공정능력 연구 보고서"
+process_name: "조립공정"
+machine_name: "Line-01"
+
+# 판정 엔진 옵션 (config/spc_policy.yaml 과 연동)
+stage: mass_production          # development | pilot | pre_mass_production | mass_production
+special_characteristic: false
+customer_exception_mode: false
+process_change_detected: false
+# customer_exception_reason: "고객 인지 규격 오류 현품 맞춤"

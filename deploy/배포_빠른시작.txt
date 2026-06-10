@@ -1,0 +1,21 @@
+SPC + X-Y 매트릭스 — 타 PC 배포 (빠른 시작)
+========================================
+
+[개발 PC에서 패키지 만들기]
+  1) package_release_build.bat 더블클릭
+     → EXE 빌드 + release\*.zip 생성 (수 분~10분)
+  2) 또는 단계별:
+     · build_exe.bat        → dist\SPC_공정능력분석\
+     · package_release.bat  → release\*.zip
+
+[타 PC에서 사용]
+  1) ZIP을 C: 또는 D: 로컬에 압축 해제
+  2) RUN_SPC.bat 또는 SPC_공정능력분석.exe 실행
+  3) Python 설치 불필요
+
+[프로그램 구성]
+  · SPC 공정능력 분석 탭
+  · X-Y 매트릭스 자동 분석 탭
+
+[문의/IT]
+  IT_GUIDE.txt, DISTRIBUTE.txt 참고

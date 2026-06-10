@@ -1,0 +1,83 @@
+{
+  "revision": "1.0",
+  "source_note": "표준 PPT 기반 업무 체계 - PPT 원본 미첨부, 구조만 placeholder",
+  "tasks": [
+    {
+      "standard_id": "STD-IN-001",
+      "revision": "1.0",
+      "task_type": "정량",
+      "major_category": "입고",
+      "middle_category": "입고검사",
+      "sub_task": "샘플링검사",
+      "description": "입고 부품 샘플링 검사",
+      "source_note": "Layer1 PPT - 입고 업무 정의",
+      "status": "SOURCE_NOT_VERIFIED"
+    },
+    {
+      "standard_id": "STD-IN-002",
+      "revision": "1.0",
+      "task_type": "정량",
+      "major_category": "입고",
+      "middle_category": "입고검사",
+      "sub_task": "전수검사",
+      "description": "입고 부품 전수 검사",
+      "source_note": "Layer1 PPT",
+      "status": "SOURCE_NOT_VERIFIED"
+    },
+    {
+      "standard_id": "STD-PR-001",
+      "revision": "1.0",
+      "task_type": "정량",
+      "major_category": "공정",
+      "middle_category": "순회검사",
+      "sub_task": "순회검사",
+      "description": "공정 순회검사",
+      "source_note": "Layer1 PPT",
+      "status": "SOURCE_NOT_VERIFIED"
+    },
+    {
+      "standard_id": "STD-PR-002",
+      "revision": "1.0",
+      "task_type": "정량",
+      "major_category": "공정",
+      "middle_category": "순회검사",
+      "sub_task": "순회검사(토크,하드웨어혼입)",
+      "description": "토크/하드웨어 혼입 포함 순회검사",
+      "source_note": "Layer1 PPT",
+      "status": "SOURCE_NOT_VERIFIED"
+    },
+    {
+      "standard_id": "STD-PR-003",
+      "revision": "1.0",
+      "task_type": "정량",
+      "major_category": "공정",
+      "middle_category": "외관검사",
+      "sub_task": "완성품외관",
+      "description": "완성품 외관 검사",
+      "source_note": "Layer1 PPT",
+      "status": "SOURCE_NOT_VERIFIED"
+    },
+    {
+      "standard_id": "STD-FN-001",
+      "revision": "1.0",
+      "task_type": "정량",
+      "major_category": "완성",
+      "middle_category": "완성검사",
+      "sub_task": "전수검사",
+      "description": "완성품 전수검사",
+      "source_note": "Layer1 PPT",
+      "status": "SOURCE_NOT_VERIFIED"
+    },
+    {
+      "standard_id": "STD-CM-001",
+      "revision": "1.0",
+      "task_type": "정성",
+      "major_category": "공통",
+      "middle_category": "품질관리",
+      "sub_task": "정성업무",
+      "description": "정성 업무 - 산식 미확정",
+      "source_note": "Layer1 PPT - 정성 구분만 반영",
+      "status": "MANUAL_CONFIRM_REQUIRED"
+    }
+  ]
+}

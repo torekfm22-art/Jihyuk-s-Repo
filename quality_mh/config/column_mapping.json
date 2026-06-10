@@ -1,0 +1,42 @@
+{
+  "revision": "1.0",
+  "description": "공장별 상이한 컬럼명을 표준 컬럼으로 매핑. 사용자가 직접 수정 가능.",
+  "standard_columns": {
+    "factory_name": ["공장", "factory", "plant", "사업장"],
+    "year": ["년", "year", "연도"],
+    "month": ["월", "month"],
+    "domain": ["구분", "domain", "영역", "검사구분"],
+    "inspection_type": ["검사종류", "검사유형", "inspection_type", "검사종류명"],
+    "line_group": ["라인구분", "line_group", "라인그룹"],
+    "line_name": ["라인", "line", "line_name", "라인명"],
+    "product_code": ["품번", "품목코드", "product_code", "part_no"],
+    "product_name": ["품명", "품목", "product_name"],
+    "quantity": ["수량", "검사건수", "건수", "quantity", "count", "입고수량", "생산수량"],
+    "inspection_name": ["검사명", "검사항목", "inspection_name", "업무명"],
+    "movement_distance_m": ["이동거리", "이동거리(m)", "distance_m", "거리"],
+    "weight_kg": ["중량", "weight_kg", "중량(kg)"],
+    "mod_code": ["동작코드", "code", "mod_code", "CODE"],
+    "mod_value": ["mod", "MOD", "mod_value", "산정공수"],
+    "auxiliary_rate": ["보조공수", "보조공수율", "auxiliary_rate"],
+    "measured_wait_sec": ["대기시간", "대기시간(초)", "wait_sec", "실측대기"],
+    "process": ["공정", "process"],
+    "equipment": ["설비", "equipment"],
+    "inspector": ["검사원", "inspector"],
+    "inspection_date": ["검사계획일", "검사일", "inspection_date"],
+    "inspection_time": ["검사시간", "inspection_time"],
+    "inspection_status": ["검사현황", "status"],
+    "process_issue": ["공정이슈", "issue"],
+    "motor_controller": ["모터/제어기", "모터제어기", "motor_controller"],
+    "frequency_value": ["발생빈도", "빈도", "frequency", "검사발생량"],
+    "unit_time_value": ["단위시간", "unit_time", "시간환산", "시간(분)"],
+    "mh_value": ["MH", "mh", "공수", "manhour"]
+  },
+  "sheet_role_hints": {
+    "종합분석": ["종합", "MH", "집계", "summary", "표준인원"],
+    "입고상세": ["입고", "incoming", "receiving"],
+    "공정상세": ["공정", "process", "순회", "pivot"],
+    "완성상세": ["완성", "finished", "final"],
+    "모답스동작분석": ["모답스", "MODAPTS", "MOD", "동작분석", "단위시간"],
+    "원본이력": ["raw", "이력", "검사현황", "data"]
+  }
+}

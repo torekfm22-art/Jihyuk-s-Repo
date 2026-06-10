@@ -1,0 +1,142 @@
+﻿MES xlsx: C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\data\input\mes_data.xlsx (150??
+QMS xlsx: C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\data\input\qms_data.xlsx (100??
+2026-06-02 13:28:10,777 [INFO] === SPC ?뚯씠?꾨씪???쒖옉 (xlsx): MES=mes_data.xlsx, QMS=qms_data.xlsx ===
+2026-06-02 13:28:10,926 [INFO] MES xlsx 異붿텧: mes_data.xlsx (150?? ?쒗듃=0)
+2026-06-02 13:28:10,934 [INFO] QMS xlsx 異붿텧: qms_data.xlsx (100?? ?쒗듃=0)
+2026-06-02 13:28:10,934 [INFO] MES/QMS xlsx 蹂묓빀 ?꾨즺: 珥?250??
+2026-06-02 13:28:10,937 [INFO] ?꾪꽣 ?곸슜 ??87??
+2026-06-02 13:28:10,938 [INFO] subgroup 梨꾩랬: 17媛?subgroup 횞 n=5 = 85媛?
+python : C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\src\spc\chart_plotter.py:46: UserWarning: Glyph 24452 (\N{CJK UNIFIED
+ IDEOGRAPH-5F84}) missing from font(s) Malgun Gothic.
+위치 C:\Users\김지혁책임품질기획팀\AppData\Local\Temp\ps-script-a55a5343-4484-4c0d-90eb-2028775764f0.ps1:110 문자:83
++ ... env:PYTHONIOENCODING='utf-8'; python scripts/run_demo.py 2>&1 | Out-F ...
++                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\源吏?곸... Malgun Gothic.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  fig.tight_layout()
+C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\src\spc\chart_plotter.py:48: UserWarning: Glyph 24452 (\N{CJK UNIFIED IDEOGRAP
+H-5F84}) missing from font(s) Malgun Gothic.
+  fig.savefig(output_path, dpi=150, bbox_inches="tight")
+C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\src\spc\chart_plotter.py:100: UserWarning: Glyph 24452 (\N{CJK UNIFIED IDEOGRA
+PH-5F84}) missing from font(s) Malgun Gothic.
+  fig.tight_layout()
+C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\src\spc\chart_plotter.py:102: UserWarning: Glyph 24452 (\N{CJK UNIFIED IDEOGRA
+PH-5F84}) missing from font(s) Malgun Gothic.
+  fig.savefig(output_path, dpi=150, bbox_inches="tight")
+2026-06-02 13:28:11,550 [INFO] 蹂닿퀬???앹꽦 ?꾨즺: C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\data\output\spc_report_20260602_132811.xlsx, C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\data\output\spc_report_20260602_132811.docx
+2026-06-02 13:28:11,550 [INFO] === SPC ?뚯씠?꾨씪???꾨즺 ===
+
+============================================================
+ SPC 遺꾩꽍 寃곌낵 ?붿빟
+============================================================
+ ?먮낯 ?곗씠?? 250嫄???遺꾩꽍 ?쒕낯: 85嫄?
+ 愿由щ룄: X-bar R
+ ?뺢퇋?? ?뺢퇋 (p=0.2089)
+ Cp=1.9397, Cpk=1.8979, Pp=1.8318, Ppk=1.7923
+ 愿由ъ긽?? ?뺤긽
+
+ Excel 蹂닿퀬?? C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\data\output\spc_report_20260602_132811.xlsx
+ Word  蹂닿퀬?? C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\data\output\spc_report_20260602_132811.docx
+ 愿由щ룄 李⑦듃:  C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\data\output\charts\xbar_r_20260602_132810.png
+ ?덉뒪?좉렇??   C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\data\output\charts\capability_20260602_132810.png
+============================================================
+============================================================
+ 1?④퀎: 媛??MES/QMS xlsx ?섑뵆 ?앹꽦
+============================================================
+
+?낅젰 ?뚯씪:
+  - mes_data.xlsx: 150?? 而щ읆=['痢≪젙?쇱떆', '怨듭젙', '?덈ぉ', '寃?ы빆紐?, 'LOT', '痢≪젙媛?, 'USL', 'LSL', 'Target']
+    ?섑뵆 3??
+               痢≪젙?쇱떆   怨듭젙        ?덈ぉ 寃?ы빆紐?    LOT     痢≪젙媛? USL  LSL  Target
+2026-05-01 00:00:00 媛怨듦났??PART-A001   ?멨푶 LOT-001 10.0600 10.5  9.5      10
+2026-05-01 00:10:00 媛怨듦났??PART-A001   ?멨푶 LOT-001  9.8958 10.5  9.5      10
+2026-05-01 00:20:00 媛怨듦났??PART-A001   ?닷푶 LOT-001  9.9987 10.5  9.5      10
+
+  - qms_data.xlsx: 100?? 而щ읆=['寃?ъ씪??, '怨듭젙紐?, '?덈쾲', '?뱀꽦', '諛곗튂踰덊샇', '寃?ш컪', '?곹븳', '?섑븳', '紐⑺몴']
+    ?섑뵆 3??
+               寃?ъ씪?? 怨듭젙紐?       ?덈쾲 ?뱀꽦      諛곗튂踰덊샇     寃?ш컪   ?곹븳  ?섑븳  紐⑺몴
+2026-05-01 00:05:00 議곕┰怨듭젙 PART-A001 ?먭퍡 BATCH-001  9.9830 10.5 9.5  10
+2026-05-01 00:17:00 議곕┰怨듭젙 PART-A001 ?멨푶 BATCH-001 10.1189 10.5 9.5  10
+2026-05-01 00:29:00 議곕┰怨듭젙 PART-A001 ?멨푶 BATCH-001 10.0961 10.5 9.5  10
+
+============================================================
+ 2?④퀎: SPC 遺꾩꽍 ?ㅽ뻾
+============================================================
+
+============================================================
+ 3?④퀎: ?앹꽦??寃곌낵臾?誘몃━蹂닿린
+============================================================
+
+[Excel] C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\data\output\spc_report_20260602_132811.xlsx
+
+--- ?쒗듃: ?붿빟 (5?? ---
+        寃?뺣갑踰?     ?듦퀎?? p_value ?뺢퇋???먯젙  ?좎쓽?섏?  ?쒕낯??  愿由щ룄?좏삎   以묒떖??CL)       UCL      LCL  異붿젙?(within)  subgroup?ш린  USL  LSL    ?됯퇏(X?)  ?_within  ?_overall     Cp    Cpk     Pp    Ppk    Cpu    Cpl  ?덉긽PPM 愿由ъ긽???댄깉?? ?먮낯?곗씠?곌굔?? 遺꾩꽍??곴굔?? 梨꾩랬?쒕낯嫄댁닔   ?곗씠?곗텧泥? ?덈ぉ   怨듭젙 寃?ы빆紐?
+Shapiro-Wilk 0.979963 0.208879     ?뺢퇋  0.05 85.0     NaN       NaN       NaN      NaN          NaN         NaN  NaN  NaN       NaN       NaN        NaN    NaN    NaN    NaN    NaN    NaN    NaN    NaN  NaN NaN      NaN     NaN     NaN     NaN NaN  NaN  NaN
+         NaN      NaN      NaN    NaN   NaN  NaN X-bar R 10.010774 10.126093 9.895456     0.085924         5.0  NaN  NaN       NaN       NaN        NaN    NaN    NaN    NaN    NaN    NaN    NaN    NaN  NaN NaN      NaN     NaN     NaN     NaN NaN  NaN  NaN
+         NaN      NaN      NaN    NaN   NaN  NaN     NaN       NaN       NaN      NaN          NaN         NaN 10.5  9.5 10.010774  0.085924   0.090986 1.9397 1.8979 1.8318 1.7923 1.8979 1.9815   0.01  NaN NaN      NaN     NaN     NaN     NaN NaN  NaN  NaN
+         NaN      NaN      NaN    NaN   NaN  NaN     NaN       NaN       NaN      NaN          NaN         NaN  NaN  NaN       NaN       NaN        NaN    NaN    NaN    NaN    NaN    NaN    NaN    NaN  愿由у뀱  ?놁쓬      NaN     NaN     NaN     NaN NaN  NaN  NaN
+         NaN      NaN      NaN    NaN   NaN  NaN X-bar R       NaN       NaN      NaN          NaN         NaN  NaN  NaN       NaN       NaN        NaN    NaN    NaN    NaN    NaN    NaN    NaN    NaN  NaN NaN    250.0    87.0    85.0 MES+QMS  ?꾩껜 議곕┰怨듭젙   ?멨푶
+
+--- ?쒗듃: ?뺢퇋?깃???(1?? ---
+        寃?뺣갑踰?     ?듦퀎?? p_value ?뺢퇋???먯젙  ?좎쓽?섏?  ?쒕낯??
+Shapiro-Wilk 0.979963 0.208879     ?뺢퇋  0.05   85
+
+--- ?쒗듃: 愿由ы븳怨?(6?? ---
+   李⑦듃  ??ぉ         媛?
+X-bar  CL 10.010774
+X-bar UCL 10.126093
+X-bar LCL  9.895456
+    R  CL  0.199859
+    R UCL  0.422701
+    R LCL  0.000000
+
+--- ?쒗듃: 怨듭젙?λ젰 (1?? ---
+ USL  LSL    ?됯퇏(X?)  ?_within  ?_overall     Cp    Cpk     Pp    Ppk    Cpu    Cpl  ?덉긽PPM
+10.5  9.5 10.010774  0.085924   0.090986 1.9397 1.8979 1.8318 1.7923 1.8979 1.9815   0.01
+
+--- ?쒗듃: Subgroup?듦퀎 (17?? ---
+ subgroup     Xbar      R
+        1 10.09344 0.1612
+        2  9.99584 0.1909
+        3 10.04454 0.2404
+        4  9.97338 0.3510
+        5  9.99900 0.0999
+        6  9.99106 0.2190
+        7  9.97036 0.2114
+        8  9.98722 0.1465
+        9 10.08124 0.1203
+       10  9.98204 0.1013
+       11  9.97950 0.3555
+       12  9.95502 0.2180
+       13 10.03528 0.3033
+       14 10.07710 0.1645
+       15 10.00780 0.1768
+       16  9.93920 0.2348
+       17 10.07114 0.1028
+
+--- ?쒗듃: 梨꾩랬?쒕낯 (85?? ---
+          timestamp process      item characteristic       lot   value  usl  lsl  target source  subgroup_id
+2026-05-01 00:17:00    議곕┰怨듭젙 PART-A001             ?멨푶 BATCH-001 10.1189 10.5  9.5      10    QMS            1
+2026-05-01 00:29:00    議곕┰怨듭젙 PART-A001             ?멨푶 BATCH-001 10.0961 10.5  9.5      10    QMS            1
+2026-05-01 00:30:00    議곕┰怨듭젙 PART-A001             ?멨푶   LOT-001 10.0622 10.5  9.5      10    MES            1
+2026-05-01 00:53:00    議곕┰怨듭젙 PART-A001             ?멨푶 BATCH-001 10.1756 10.5  9.5      10    QMS            1
+2026-05-01 01:05:00    議곕┰怨듭젙 PART-A001             ?멨푶 BATCH-001 10.0144 10.5  9.5      10    QMS            1
+2026-05-01 01:17:00    議곕┰怨듭젙 PART-A001             ?멨푶 BATCH-001 10.0300 10.5  9.5      10    QMS            2
+2026-05-01 01:29:00    議곕┰怨듭젙 PART-A001             ?멨푶 BATCH-001  9.9250 10.5  9.5      10    QMS            2
+2026-05-01 01:30:00    議곕┰怨듭젙 PART-A001             ?멨푶   LOT-001 10.0345 10.5  9.5      10    MES            2
+2026-05-01 01:41:00    議곕┰怨듭젙 PART-A001             ?멨푶 BATCH-002  9.8994 10.5  9.5      10    QMS            2
+2026-05-01 01:50:00    議곕┰怨듭젙 PART-A001             ?멨푶   LOT-002 10.0903 10.5  9.5      10    MES            2
+... (??75??
+
+[Word]  C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\data\output\spc_report_20260602_132811.docx
+  ???쒖?, ?뺢퇋?? 愿由ы븳怨??? 愿由щ룄쨌?덉뒪?좉렇???대?吏, Cp/Cpk, 寃곕줎
+
+[李⑦듃 PNG]
+  - xbar_r_20260602_132810.png
+  - capability_20260602_132810.png
+
+============================================================
+ 寃곌낵 ?대뜑瑜??먯깋湲곗뿉???대젮硫?
+   C:\Users\源吏?곸콉?꾪뭹吏덇린?랁?\Desktop\Github\data\output
+============================================================

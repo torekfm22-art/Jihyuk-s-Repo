@@ -1,0 +1,22 @@
+# 회사 SPC 판정 기준 — 운영 중 수정 가능
+subgroup_min_groups: 25
+recommended_subgroup_sizes: [3, 4, 5]
+cp_cpk_threshold: 1.33
+pp_ppk_threshold: 1.67
+run_rule_points: 7
+trend_rule_points: 7
+strict_company_mode: true
+advanced_spc_mode: false
+aiag_vda_mode: true
+enable_customer_exception_rule: true
+
+# 정규성 경계 판정 (p-value)
+normality_borderline_p: 0.05
+normality_clearly_non_normal_p: 0.01
+
+# AIAG-VDA 확장
+pre_control_subgroup_max: 2
+machine_capability_recommended_stages:
+  - development
+  - pilot
+  - pre_mass_production

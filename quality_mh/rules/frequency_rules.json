@@ -1,0 +1,115 @@
+{
+  "revision": "1.0",
+  "rules": [
+    {
+      "rule_id": "FREQ-RAW-COUNT",
+      "revision": "1.0",
+      "category": "발생빈도",
+      "sub_category": "실적기반",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "frequency = count(inspection_records)",
+      "parameters": {
+        "aggregation": "count",
+        "group_by": ["factory_name", "domain", "inspection_type", "line_name", "year", "month"]
+      },
+      "source_file": "Layer2 발생빈도 산출 자료",
+      "source_sheet": "Raw data",
+      "source_range": "",
+      "status": "CONFIRMED",
+      "verified_by": "",
+      "remarks": "Raw 이력 기반 검사건수 집계 - 구조 확인됨"
+    },
+    {
+      "rule_id": "FREQ-PLAN-QTY",
+      "revision": "1.0",
+      "category": "발생빈도",
+      "sub_category": "계획수량기반",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "frequency = quantity * ratio",
+      "parameters": {
+        "ratio_field": "RULE_NOT_CONFIRMED",
+        "note": "품목별/연도별/월별 계획수량 × 비율 - 비율 산식 미확정"
+      },
+      "source_file": "Layer2 발생빈도 산출 자료",
+      "source_sheet": "완성/입고 계획",
+      "source_range": "",
+      "status": "RULE_NOT_CONFIRMED",
+      "verified_by": "",
+      "remarks": "사업계획 물량 기반 추정 구조 존재하나 비율 산식 미확정"
+    },
+    {
+      "rule_id": "FREQ-WEIGHTED-AVG",
+      "revision": "1.0",
+      "category": "발생빈도",
+      "sub_category": "가중평균",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "frequency = weighted_average(monthly_values, weights)",
+      "parameters": {
+        "window_years": 2,
+        "weight_field": "RULE_NOT_CONFIRMED"
+      },
+      "source_file": "Layer2 발생빈도 산출 자료",
+      "source_sheet": "공정 pivot",
+      "source_range": "",
+      "status": "RULE_NOT_CONFIRMED",
+      "verified_by": "",
+      "remarks": "2개년 가중평균(월) 구조 확인 - 가중치 미확정"
+    },
+    {
+      "rule_id": "FREQ-SAMPLING",
+      "revision": "1.0",
+      "category": "발생빈도",
+      "sub_category": "입고_샘플링",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "RULE_NOT_CONFIRMED",
+      "parameters": {
+        "inspection_type": "샘플링"
+      },
+      "source_file": "Layer2 발생빈도 산출 자료",
+      "source_sheet": "입고",
+      "source_range": "",
+      "status": "MANUAL_CONFIRM_REQUIRED",
+      "verified_by": "",
+      "remarks": "샘플링/전수/무검사 구분 구조 확인 - 산식 미확정"
+    },
+    {
+      "rule_id": "FREQ-INCOMING-INSPECTION",
+      "revision": "1.0",
+      "category": "발생빈도",
+      "sub_category": "입고검사_생산계획연동",
+      "applicable_factory": ["천안"],
+      "applicable_line": ["*"],
+      "formula_expression": "inspection_count = f(pivot_actual, production_plan, type_shares, rates)",
+      "parameters": {
+        "inspection_types": ["샘플링", "전수", "무검사"],
+        "projection": "생산수량 -> 입고수량 -> 합계검사건수 -> 유형별 분해"
+      },
+      "source_file": "첨부) 1. (천안EBS) 입고 MH 산출 (상세) 근거_v2",
+      "source_sheet": "입고검사 발생빈도 분석(생산계획 연동)",
+      "source_range": "",
+      "status": "CONFIRMED",
+      "verified_by": "",
+      "remarks": "Pivot 실적 + 생산계획 연동 추정. 샘플링/전수/무검사/합계 및 비율 지표 자동 집계"
+    },
+    {
+      "rule_id": "FREQ-PASS-THROUGH",
+      "revision": "1.0",
+      "category": "발생빈도",
+      "sub_category": "pivot_직접사용",
+      "applicable_factory": ["*"],
+      "applicable_line": ["*"],
+      "formula_expression": "frequency = pivot_value",
+      "parameters": {},
+      "source_file": "Layer2 발생빈도 산출 자료",
+      "source_sheet": "pivot",
+      "source_range": "",
+      "status": "CONFIRMED",
+      "verified_by": "",
+      "remarks": "이미 산출된 pivot 값을 frequency로 직접 사용"
+    }
+  ]
+}
