@@ -2,5 +2,8 @@ pandas>=2.2.0
 openpyxl>=3.1.2
 pydantic>=2.5.0
 streamlit>=1.32.0
+plotly>=5.18.0
+python-pptx>=0.6.23
+pywebview>=5.0.0
 pytest>=8.0.0
 pywin32>=306; sys_platform == "win32"

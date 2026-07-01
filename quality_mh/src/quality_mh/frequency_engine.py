@@ -1,186 +1,161 @@
-"""발생빈도 엔진."""
+"""발생빈도 자동 계산 엔진."""
 from __future__ import annotations
 
-import math
-from typing import Any
+from typing import Optional
 
-import pandas as pd
-
-from quality_mh.audit_engine import AuditEngine
-from quality_mh.constants import RuleStatus, ValidationStatus
-from quality_mh.models import FrequencyInput, RuleBase
-from quality_mh.rule_loader import load_frequency_rules
+from quality_mh.models import FrequencyDB, FrequencyMethod, RuleMaster
 
 
-class FrequencyEngine:
-    def __init__(self, rules: list[RuleBase] | None = None, audit: AuditEngine | None = None) -> None:
-        self.rules = rules or load_frequency_rules()
-        self.audit = audit or AuditEngine()
-        self._rule_map = {r.rule_id: r for r in self.rules}
+def calculate_frequency_weighted_average_excel_style(
+    y1: float,
+    y2: float,
+    y3: float,
+    w1: float = 5.0,
+    w2: float = 3.0,
+    w3: float = 2.0,
+) -> tuple[float, dict, list[str]]:
+    """3개년 가중평균 발생빈도 산출."""
+    log: list[str] = []
+    log.append(f"[입력] Y-1 실적={y1}, Y-2 실적={y2}, Y-3 실적={y3}")
+    log.append(f"[입력] 가중치 w1={w1}, w2={w2}, w3={w3}")
+    weighted_sum = y1 * w1 + y2 * w2 + y3 * w3
+    weight_total = w1 + w2 + w3
+    log.append(f"[중간] 가중합 = {y1}×{w1} + {y2}×{w2} + {y3}×{w3} = {weighted_sum}")
+    log.append(f"[중간] 가중치 합 = {w1}+{w2}+{w3} = {weight_total}")
+    frequency = weighted_sum / weight_total
+    log.append(f"[공식] 발생빈도 = 가중합 ÷ 가중치합 = {weighted_sum} ÷ {weight_total}")
+    log.append(f"[결과] 발생빈도 = {frequency}")
+    factors = {
+        "y1_actual": y1,
+        "y2_actual": y2,
+        "y3_actual": y3,
+        "weight1": w1,
+        "weight2": w2,
+        "weight3": w3,
+        "weighted_sum": weighted_sum,
+        "weight_total": weight_total,
+    }
+    return frequency, factors, log
 
-    def apply_raw_count(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Raw 이력 기반 검사건수 집계."""
-        rule = self._rule_map.get("FREQ-RAW-COUNT")
-        required = ["factory_name", "domain"]
-        missing = [c for c in required if c not in df.columns]
-        if missing:
-            self.audit.log_rule_application(
-                "frequency_engine",
-                "FREQ-RAW-COUNT",
-                status=RuleStatus.NEEDS_REVIEW,
-                message=f"필수 컬럼 누락: {missing}",
-            )
-            return pd.DataFrame()
 
-        group_cols = [c for c in [
-            "factory_name", "domain", "inspection_type", "line_name", "inspection_name",
-            "year", "month", "product_code", "line_group",
-        ] if c in df.columns]
+def calculate_frequency_plan_linked_excel_style(
+    ref_ratio: float,
+    plan_qty: float,
+) -> tuple[float, dict, list[str]]:
+    """생산계획 연동 발생빈도 산출."""
+    log: list[str] = []
+    log.append(f"[입력] 기준비율(ref_ratio)={ref_ratio}, 당해년 계획생산량(plan_qty)={plan_qty}")
+    log.append("[공식] 발생빈도 = 기준비율 × 계획생산량")
+    frequency = ref_ratio * plan_qty
+    log.append(f"[중간] {ref_ratio} × {plan_qty} = {frequency}")
+    log.append(f"[결과] 발생빈도 = {frequency}")
+    factors = {"ref_ratio": ref_ratio, "plan_qty": plan_qty}
+    return frequency, factors, log
 
-        if "quantity" in df.columns:
-            result = df.groupby(group_cols, dropna=False)["quantity"].sum().reset_index()
-            result = result.rename(columns={"quantity": "frequency_value"})
-        else:
-            result = df.groupby(group_cols, dropna=False).size().reset_index(name="frequency_value")
 
-        result["applied_frequency_rule"] = "FREQ-RAW-COUNT"
-        result["validation_status"] = ValidationStatus.OK.value
-        result["validation_message"] = ""
+def calculate_frequency_periodic_excel_style(
+    cycle_type: str,
+    cycle_count: float,
+    working_days: float = 20.0,
+    working_weeks: float = 4.0,
+    working_months: float = 12.0,
+) -> tuple[float, dict, list[str]]:
+    """수행주기 기반 월 발생빈도 산출."""
+    log: list[str] = []
+    log.append(
+        f"[입력] 수행주기={cycle_type}, 횟수={cycle_count}, "
+        f"근무일={working_days}, 근무주={working_weeks}, 근무월={working_months}"
+    )
+    if cycle_type == "일간":
+        log.append(f"[공식] 월 발생빈도 = 횟수 × 근무일수 = {cycle_count} × {working_days}")
+        frequency = cycle_count * working_days
+    elif cycle_type == "주간":
+        log.append(f"[공식] 월 발생빈도 = 횟수 × 근무주수 = {cycle_count} × {working_weeks}")
+        frequency = cycle_count * working_weeks
+    elif cycle_type == "월간":
+        log.append(f"[공식] 월 발생빈도 = 횟수 = {cycle_count}")
+        frequency = cycle_count
+    elif cycle_type == "분기":
+        log.append(f"[공식] 월 발생빈도 = 횟수 × 4 ÷ 12 = {cycle_count} × 4 ÷ 12")
+        frequency = cycle_count * 4 / 12
+    elif cycle_type == "연간":
+        log.append(f"[공식] 월 발생빈도 = 횟수 ÷ 12 = {cycle_count} ÷ 12")
+        frequency = cycle_count / 12
+    else:
+        raise ValueError(f"지원하지 않는 수행주기 유형: {cycle_type}")
+    log.append(f"[결과] 월 발생빈도 = {frequency}")
+    factors = {
+        "cycle_type": cycle_type,
+        "cycle_count": cycle_count,
+        "working_days": working_days,
+        "working_weeks": working_weeks,
+        "working_months": working_months,
+    }
+    return frequency, factors, log
 
-        self.audit.log_rule_application(
-            "frequency_engine",
-            "FREQ-RAW-COUNT",
-            source_file=rule.source_file if rule else "",
-            source_sheet=rule.source_sheet if rule else "",
-            status=RuleStatus.CONFIRMED,
-            message=f"집계 {len(result)}건",
+
+def calculate_frequency_by_task_rule(
+    rule: RuleMaster,
+    freq_db: FrequencyDB,
+    override_value: Optional[float] = None,
+) -> tuple[float, FrequencyMethod, dict, list[str], bool]:
+    """업무 rule에 따른 발생빈도 메인 디스패처."""
+    method = freq_db.frequency_method or rule.frequency_method
+    log: list[str] = [f"[시작] 업무={rule.task_name}({rule.task_code}), 산정방식={method.value}"]
+    factors: dict = {"task_code": rule.task_code, "task_name": rule.task_name}
+
+    if override_value is not None and override_value > 0:
+        log.append(f"[수기입력] 발생빈도 = {override_value} (연간 기준 직접 입력)")
+        factors["auto_frequency"] = override_value
+        factors["override_value"] = override_value
+        log.append(f"[최종] 발생빈도 = {override_value}")
+        return override_value, method, factors, log, True
+
+    if method == FrequencyMethod.WEIGHTED_AVG:
+        if freq_db.y1_actual is None or freq_db.y2_actual is None or freq_db.y3_actual is None:
+            raise ValueError("3개년 가중평균: Y-1/Y-2/Y-3 실적이 모두 필요합니다.")
+        auto_freq, factors, sub_log = calculate_frequency_weighted_average_excel_style(
+            freq_db.y1_actual,
+            freq_db.y2_actual,
+            freq_db.y3_actual,
+            freq_db.weight1,
+            freq_db.weight2,
+            freq_db.weight3,
         )
-        return result
-
-    def apply_pivot_pass_through(self, df: pd.DataFrame) -> pd.DataFrame:
-        """이미 산출된 pivot frequency 값 사용."""
-        rule = self._rule_map.get("FREQ-PASS-THROUGH")
-        if "frequency_value" not in df.columns:
-            qty_cols = [c for c in df.columns if c in ("quantity", "검사건수", "건수")]
-            if qty_cols:
-                df = df.copy()
-                df["frequency_value"] = df[qty_cols[0]]
-            else:
-                self.audit.log_rule_application(
-                    "frequency_engine",
-                    "FREQ-PASS-THROUGH",
-                    status=RuleStatus.NEEDS_REVIEW,
-                    message="frequency_value 또는 quantity 컬럼 없음",
-                )
-                return pd.DataFrame()
-
-        result = df.copy()
-        result["applied_frequency_rule"] = "FREQ-PASS-THROUGH"
-        result["validation_status"] = ValidationStatus.OK.value
-        result["validation_message"] = ""
-
-        self.audit.log_rule_application(
-            "frequency_engine",
-            "FREQ-PASS-THROUGH",
-            source_file=rule.source_file if rule else "",
-            status=RuleStatus.CONFIRMED,
+    elif method == FrequencyMethod.PLAN_LINKED:
+        if freq_db.ref_ratio is None or freq_db.plan_qty is None:
+            raise ValueError("생산계획 연동: ref_ratio와 plan_qty가 필요합니다.")
+        auto_freq, factors, sub_log = calculate_frequency_plan_linked_excel_style(
+            freq_db.ref_ratio,
+            freq_db.plan_qty,
         )
-        return result
-
-    def apply_weighted_average(self, df: pd.DataFrame, value_col: str = "frequency_value") -> pd.DataFrame:
-        """2개년 가중평균 - 가중치 미확정 시 NEEDS_REVIEW."""
-        rule = self._rule_map.get("FREQ-WEIGHTED-AVG")
-        self.audit.log_rule_application(
-            "frequency_engine",
-            "FREQ-WEIGHTED-AVG",
-            source_file=rule.source_file if rule else "",
-            status=RuleStatus.RULE_NOT_CONFIRMED,
-            message="가중치 미확정 - 단순 평균 placeholder (검토 필요)",
+        if freq_db.sampling_type:
+            factors["sampling_type"] = freq_db.sampling_type
+    elif method == FrequencyMethod.PERIODIC:
+        if freq_db.cycle_type is None or freq_db.cycle_count is None:
+            raise ValueError("수행주기: cycle_type과 cycle_count가 필요합니다.")
+        auto_freq, factors, sub_log = calculate_frequency_periodic_excel_style(
+            freq_db.cycle_type,
+            freq_db.cycle_count,
+            freq_db.working_days,
+            freq_db.working_weeks,
+            freq_db.working_months,
         )
+    else:
+        raise ValueError(f"지원하지 않는 발생빈도 산정방식: {method}")
 
-        group_cols = [c for c in ["factory_name", "domain", "inspection_type", "line_name", "month"] if c in df.columns]
-        if not group_cols or value_col not in df.columns:
-            return pd.DataFrame()
+    log.extend(sub_log)
+    factors["auto_frequency"] = auto_freq
+    factors["task_code"] = rule.task_code
+    factors["task_name"] = rule.task_name
 
-        result = df.groupby(group_cols, dropna=False)[value_col].mean().reset_index()
-        result = result.rename(columns={value_col: "frequency_value"})
-        result["applied_frequency_rule"] = "FREQ-WEIGHTED-AVG"
-        result["validation_status"] = ValidationStatus.RULE_NOT_CONFIRMED.value
-        result["validation_message"] = "가중치 미확정 - 산술평균 placeholder"
-        return result
+    is_overridden = override_value is not None
+    final_freq = override_value if is_overridden else auto_freq
+    if is_overridden:
+        log.append(f"[Override] 자동계산값={auto_freq} → 수기입력값={override_value}")
+        factors["override_value"] = override_value
+        if auto_freq != 0:
+            factors["override_diff_rate"] = (override_value - auto_freq) / auto_freq
+    log.append(f"[최종] 발생빈도 = {final_freq}")
 
-    def calc_from_inputs(self, inputs: list[FrequencyInput]) -> pd.DataFrame:
-        rows = []
-        for inp in inputs:
-            if inp.quantity is None:
-                rows.append({
-                    **inp.model_dump(),
-                    "frequency_value": None,
-                    "applied_frequency_rule": "",
-                    "validation_status": ValidationStatus.MANUAL_CONFIRM_REQUIRED.value,
-                    "validation_message": "quantity 미입력",
-                })
-                continue
-            rows.append({
-                **inp.model_dump(),
-                "frequency_value": inp.quantity,
-                "applied_frequency_rule": "FREQ-PASS-THROUGH",
-                "validation_status": ValidationStatus.OK.value,
-                "validation_message": "",
-            })
-        return pd.DataFrame(rows)
-
-    def apply_incoming_inspection_summary(self, df: pd.DataFrame) -> pd.DataFrame:
-        """입고검사 발생빈도 분석(생산계획 연동) 집계 결과 사용."""
-        from quality_mh.incoming_frequency_analyzer import to_frequency_dataframe
-
-        rule = self._rule_map.get("FREQ-INCOMING-INSPECTION")
-        if df.empty:
-            self.audit.log_rule_application(
-                "frequency_engine",
-                "FREQ-INCOMING-INSPECTION",
-                status=RuleStatus.NEEDS_REVIEW,
-                message="입고검사 발생빈도 집계 데이터 없음",
-            )
-            return pd.DataFrame()
-
-        result = to_frequency_dataframe(df)
-        if result.empty:
-            self.audit.log_rule_application(
-                "frequency_engine",
-                "FREQ-INCOMING-INSPECTION",
-                status=RuleStatus.NEEDS_REVIEW,
-                message="입고검사 건수 행 변환 실패",
-            )
-            return pd.DataFrame()
-
-        self.audit.log_rule_application(
-            "frequency_engine",
-            "FREQ-INCOMING-INSPECTION",
-            source_file=rule.source_file if rule else "",
-            source_sheet=rule.source_sheet if rule else "",
-            status=RuleStatus.CONFIRMED,
-            message=f"입고검사 빈도 {len(result)}건",
-        )
-        return result
-
-    def process_dataframe(self, df: pd.DataFrame, mode: str = "auto") -> pd.DataFrame:
-        """파일 역할에 따라 빈도 산출 방식 선택."""
-        if mode == "incoming_summary" or (
-            "metric" in df.columns and "inspection_type" in df.columns
-        ):
-            return self.apply_incoming_inspection_summary(df)
-        if mode == "raw" or ("inspection_name" in df.columns and "frequency_value" not in df.columns):
-            return self.apply_raw_count(df)
-        if "frequency_value" in df.columns or any(c in df.columns for c in ("quantity", "검사건수")):
-            return self.apply_pivot_pass_through(df)
-        return self.apply_raw_count(df)
-
-
-def _safe_float(val: Any) -> float | None:
-    if val is None or (isinstance(val, float) and math.isnan(val)):
-        return None
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return None
+    return final_freq, method, factors, log, is_overridden
