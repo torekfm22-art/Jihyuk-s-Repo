@@ -22,9 +22,14 @@ from src.spc.report_decision_dashboard import (
 )
 from src.spc.report_glossary_sheet import add_glossary_sheet
 from src.spc.report_validation_sheet import SheetMeta, add_validation_sheet, sanitize_xlsx_formula_file
-from src.spc.statistics import SpcAnalysisResult
+from src.spc.statistics import SpcAnalysisResult, _cap_round
+from src.spc.characteristic_split import safe_filename_slug
+from src.spc.traceability_export import build_traceability_sheets
 
 logger = logging.getLogger(__name__)
+
+TRACE_CAUTION_FILL = PatternFill("solid", fgColor="FFE4E1")
+TRACE_HEADER_FILL = PatternFill("solid", fgColor="9C0006")
 
 THIN = Side(style="thin", color="999999")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -32,6 +37,40 @@ HEADER_FILL = PatternFill("solid", fgColor="1F4E79")
 HEADER_FONT = Font(bold=True, color="FFFFFF", size=10)
 LABEL_FONT = Font(bold=True, size=9)
 VALUE_FONT = Font(size=9)
+
+
+def _fmt_spec_limit(val: float | None) -> str:
+    if val is None:
+        return "—"
+    return f"{val:g}"
+
+
+def _fmt_cap_number(val: float) -> str:
+    rounded = _cap_round(val)
+    if isinstance(rounded, str):
+        return rounded
+    return f"{rounded:.4f}"
+
+
+def _norm_pct_outside_spec(
+    cap,
+    sp_stats,
+) -> tuple[float | None, float | None]:
+    """정규 근사 P% — 해당 규격한이 없으면 None."""
+    if not cap.std_within or cap.std_within <= 0:
+        return None, None
+    scale = cap.std_within
+    pct_above = (
+        float(sp_stats.norm.sf((cap.usl - cap.mean) / scale) * 100)
+        if cap.usl is not None
+        else None
+    )
+    pct_below = (
+        float(sp_stats.norm.cdf((cap.lsl - cap.mean) / scale) * 100)
+        if cap.lsl is not None
+        else None
+    )
+    return pct_above, pct_below
 
 
 def _raw_values_from_sample(raw_sample: pd.DataFrame | None):
@@ -54,18 +93,38 @@ def _conclusion_text(
 def format_decision_for_report(decision: SpcDecisionResult) -> str:
     """회사 기준 판정·해석 코멘트 보고서 텍스트."""
     v = decision.verdict_summary
+    cap = decision.capability
     lines = [
-        "【자동 판정 요약】",
-        f"  공정상태: {v.process_stability}",
-        f"  정규성: {v.normality_verdict}",
-        f"  공정능력: {v.capability_verdict}",
+        "【자동 판정 요약 — AIAG-VDA 순서】",
+        f"  [1] 공정상태: {v.process_stability}",
+        f"  [2] 정규성: {v.normality_verdict}",
+        f"  [3] Primary KPI: {v.primary_kpi}",
+        f"  [4] Cp/Cpk 유효성: {v.cp_cpk_validity}",
+        f"  [5] 관리도 이상 패턴: {v.western_electric_summary}",
+        f"  [6] 권고 조치: {v.priority_action}",
+        f"  공정 레벨: {v.process_level}",
+        f"  Subgroup: {v.subgroup_rationality}",
+        f"  공정능력 판정: {v.capability_verdict}",
         f"  관리용 관리도 적용: {v.control_chart_deploy}",
-        f"  우선 조치: {v.priority_action}",
+    ]
+    if cap and cap.cpk_ppk_gap is not None:
+        lines.append(f"  Cpk−Ppk Gap: {cap.cpk_ppk_gap:.3f} ({cap.gap_interpretation})")
+    if decision.normality.applied_action:
+        lines.append(f"  정규성 조치: {decision.normality.applied_action}")
+    lines.extend([
         "",
         "【회사 기준 판정 근거 (Decision Log)】",
-    ]
+    ])
     for entry in decision.control_chart.decision_log:
         lines.append(f"  · [{entry.rule_id}] {entry.message}")
+    if decision.control_chart.western_electric_violations:
+        lines.append("")
+        lines.append("【Western Electric Rules】")
+        for we_v in decision.control_chart.western_electric_violations:
+            loc = ", ".join(str(p) for p in we_v.affected_subgroups)
+            lines.append(
+                f"  · {we_v.rule_id}: {we_v.rule_name} — {we_v.occurrence_count}회 (subgroup {loc})"
+            )
     lines.extend([
         "",
         "【SPC 전문가 해석】",
@@ -110,16 +169,51 @@ class ComprehensiveReportGenerator:
         study_info: dict,
         report_title: str = "SPC 및 공정능력 연구 보고서",
         decision: SpcDecisionResult | None = None,
+        file_tag: str | None = None,
     ) -> dict[str, Path]:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        excel_path = self.output_dir / f"SPC_종합보고서_{ts}.xlsx"
-        pdf_path = self.output_dir / f"SPC_종합보고서_{ts}.pdf"
+        suffix = f"_{safe_tag}" if (safe_tag := _file_tag_slug(file_tag)) else ""
+        excel_path = self.output_dir / f"SPC_종합보고서{suffix}_{ts}.xlsx"
+        pdf_path = self.output_dir / f"SPC_종합보고서{suffix}_{ts}.pdf"
 
         self._write_excel(excel_path, result, charts, raw_sample, study_info, report_title, decision)
         self._write_pdf(pdf_path, result, charts, study_info, report_title, raw_sample, decision)
 
         logger.info("종합 보고서: %s, %s", excel_path, pdf_path)
         return {"excel": excel_path, "pdf": pdf_path, "excel_detail": excel_path}
+
+    def generate_bytes(
+        self,
+        result: SpcAnalysisResult,
+        *,
+        charts: ChartPaths,
+        raw_sample: pd.DataFrame,
+        study_info: dict,
+        report_title: str = "SPC 및 공정능력 연구 보고서",
+        decision: SpcDecisionResult | None = None,
+        file_tag: str | None = None,
+    ) -> tuple[bytes, bytes, str]:
+        """Excel/PDF 바이트 생성 (디스크 output 저장 없음)."""
+        import tempfile
+
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        suffix = f"_{safe_tag}" if (safe_tag := _file_tag_slug(file_tag)) else ""
+        stem = f"SPC_종합보고서{suffix}_{ts}"
+
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp_xlsx:
+            excel_path = Path(tmp_xlsx.name)
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_pdf:
+            pdf_path = Path(tmp_pdf.name)
+        try:
+            self._write_excel(excel_path, result, charts, raw_sample, study_info, report_title, decision)
+            excel_bytes = excel_path.read_bytes()
+            self._write_pdf(pdf_path, result, charts, study_info, report_title, raw_sample, decision)
+            pdf_bytes = pdf_path.read_bytes()
+        finally:
+            excel_path.unlink(missing_ok=True)
+            pdf_path.unlink(missing_ok=True)
+
+        return excel_bytes, pdf_bytes, stem
 
     def _write_excel(
         self,
@@ -158,10 +252,10 @@ class ComprehensiveReportGenerator:
         for label, value in meta_rows:
             ws.cell(row, 1, label).font = LABEL_FONT
             ws.cell(row, 1).border = BORDER
+            ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
             val_cell = ws.cell(row, 2, value)
             val_cell.font = VALUE_FONT
             val_cell.border = BORDER
-            ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
             row += 1
 
         # 공정능력 지표 (우측) — 메타와 동일 시작행 (판정 스트립과 겹치지 않게)
@@ -217,7 +311,7 @@ class ComprehensiveReportGenerator:
             add_decision_dashboard_sheet(wb, decision, study_info=study_info, insert_at=0)
             apply_decision_sheet_styles(wb, decision)
         add_glossary_sheet(wb, result)
-        add_validation_sheet(wb, result, sheet_registry)
+        add_validation_sheet(wb, result, sheet_registry, decision)
         wb.save(path)
         sanitize_xlsx_formula_file(path)
 
@@ -233,8 +327,8 @@ class ComprehensiveReportGenerator:
             ("2. 설비/라인", info.get("machine", "-")),
             ("3. 품목", info.get("item", "-")),
             ("4. 특성(검사항목)", info.get("characteristic", "-")),
-            ("5. USL", f"{cap.usl}" if cap else "-"),
-            ("6. LSL", f"{cap.lsl}" if cap else "-"),
+            ("5. USL", _fmt_spec_limit(cap.usl) if cap else "-"),
+            ("6. LSL", _fmt_spec_limit(cap.lsl) if cap else "-"),
             ("7. 표본수", str(result.normality.n)),
             ("8. Subgroup 크기", str(result.control_limits.subgroup_size or "-")),
             ("9. 관리도 유형", result.control_limits.chart_type),
@@ -247,6 +341,7 @@ class ComprehensiveReportGenerator:
             rows.insert(3, ("데이터 출처", info["data_source"]))
         if info.get("sampling"):
             rows.append(("18. 채취 방식", info["sampling"]))
+        rows.append(("19. 역추적", "Excel 시트 「역추적_채취표본」「역추적_Subgroup」 — 분홍=주의"))
         return rows
 
     def _capability_rows(self, result: SpcAnalysisResult) -> list[tuple[str, str]]:
@@ -255,22 +350,43 @@ class ComprehensiveReportGenerator:
         from scipy import stats as sp_stats
 
         c = result.capability
-        pct_above = sp_stats.norm.sf((c.usl - c.mean) / c.std_within) * 100 if c.std_within else 0
-        pct_below = sp_stats.norm.cdf((c.lsl - c.mean) / c.std_within) * 100 if c.std_within else 0
-        return [
-            ("USL", f"{c.usl:g}"),
-            ("LSL", f"{c.lsl:g}"),
+        spec = getattr(c, "spec_type", "two_sided")
+        pct_above, pct_below = _norm_pct_outside_spec(c, sp_stats)
+
+        rows: list[tuple[str, str]] = [
+            ("USL", _fmt_spec_limit(c.usl)),
+            ("LSL", _fmt_spec_limit(c.lsl)),
             ("Mean", f"{c.mean:.6f}"),
             ("Std(within)", f"{c.std_within:.6f}"),
             ("Std(overall)", f"{c.std_overall:.6f}"),
-            ("Cp", f"{c.cp:.4f}"),
-            ("Cpk", f"{c.cpk:.4f}"),
-            ("Pp", f"{c.pp:.4f}"),
-            ("Ppk", f"{c.ppk:.4f}"),
-            ("예상 PPM", f"{c.ppm_est:.2f}"),
-            ("P% > USL", f"{pct_above:.4f}%"),
-            ("P% < LSL", f"{pct_below:.4f}%"),
         ]
+        if spec == "upper_only":
+            rows.extend([
+                ("Cpk (CWU)", _fmt_cap_number(c.cpk)),
+                ("Cpu (CWU)", _fmt_cap_number(c.cpu)),
+                ("Ppk", _fmt_cap_number(c.ppk)),
+                ("Pp", _fmt_cap_number(c.pp)),
+            ])
+        elif spec == "lower_only":
+            rows.extend([
+                ("Cpk (CWL)", _fmt_cap_number(c.cpk)),
+                ("Cpl (CWL)", _fmt_cap_number(c.cpl)),
+                ("Ppk", _fmt_cap_number(c.ppk)),
+                ("Pp", _fmt_cap_number(c.pp)),
+            ])
+        else:
+            rows.extend([
+                ("Cp", _fmt_cap_number(c.cp)),
+                ("Cpk", _fmt_cap_number(c.cpk)),
+                ("Pp", _fmt_cap_number(c.pp)),
+                ("Ppk", _fmt_cap_number(c.ppk)),
+            ])
+        rows.append(("예상 PPM", f"{c.ppm_est:.2f}"))
+        if pct_above is not None:
+            rows.append(("P% > USL", f"{pct_above:.4f}%"))
+        if pct_below is not None:
+            rows.append(("P% < LSL", f"{pct_below:.4f}%"))
+        return rows
 
     def _add_detail_sheets(
         self,
@@ -307,6 +423,9 @@ class ComprehensiveReportGenerator:
 
         sheets.append(("채취표본", raw_sample))
 
+        for name, df in build_traceability_sheets(raw_sample, result, decision):
+            sheets.append((name, df))
+
         if decision:
             log_rows = [
                 {"rule_id": e.rule_id, "message": e.message, "priority": e.priority}
@@ -331,8 +450,44 @@ class ComprehensiveReportGenerator:
 
         registry: dict[str, SheetMeta] = {}
         for name, df in sheets:
-            registry[name] = self._write_dataframe_sheet(wb, name, df)
+            if name.startswith("역추적_"):
+                registry[name] = self._write_traceability_sheet(wb, name, df)
+            else:
+                registry[name] = self._write_dataframe_sheet(wb, name, df)
         return registry
+
+    @staticmethod
+    def _write_traceability_sheet(wb: Workbook, name: str, df: pd.DataFrame) -> SheetMeta:
+        ws = wb.create_sheet(name)
+        headers: dict[str, int] = {}
+        caution_col: int | None = None
+        watch_col: int | None = None
+        for c_idx, col in enumerate(df.columns, 1):
+            cell = ws.cell(1, c_idx, col)
+            cell.fill = TRACE_HEADER_FILL if name.startswith("역추적_") else HEADER_FILL
+            cell.font = HEADER_FONT
+            headers[str(col)] = c_idx
+            if str(col) == "역추적_주의":
+                caution_col = c_idx
+            if str(col) == "미달/주의":
+                watch_col = c_idx
+
+        for r_idx, row in enumerate(df.itertuples(index=False), 2):
+            highlight = False
+            if caution_col is not None:
+                highlight = str(row[caution_col - 1]).strip().upper() == "Y"
+            elif watch_col is not None:
+                w = str(row[watch_col - 1]).strip().upper()
+                highlight = w in ("Y", "△")
+            for c_idx, val in enumerate(row, 1):
+                if isinstance(val, float) and pd.isna(val):
+                    val = None
+                cell = ws.cell(r_idx, c_idx, val)
+                if highlight:
+                    cell.fill = TRACE_CAUTION_FILL
+
+        end_row = max(1, 1 + len(df))
+        return SheetMeta(name=name, headers=headers, data_start_row=2, data_end_row=end_row)
 
     @staticmethod
     def _write_dataframe_sheet(wb: Workbook, name: str, df: pd.DataFrame) -> SheetMeta:
@@ -428,3 +583,9 @@ class ComprehensiveReportGenerator:
         story.append(Paragraph("<b>20. Conclusions / Recommendations</b>", label_style))
         story.append(Paragraph(concl_html, concl_style))
         doc.build(story)
+
+
+def _file_tag_slug(tag: str | None) -> str:
+    if not tag or not str(tag).strip():
+        return ""
+    return safe_filename_slug(str(tag))

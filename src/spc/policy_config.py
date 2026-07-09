@@ -27,6 +27,12 @@ class SpcPolicyConfig:
     pp_ppk_threshold: float = 1.67
     run_rule_points: int = 7
     trend_rule_points: int = 7
+    center_cluster_pct: float = 0.90
+    high_dispersion_pct: float = 0.40
+    allow_tool_wear_trend: bool = False
+    allow_customer_run: bool = False
+    near_limit_2of3: bool = True
+    near_limit_4of7: bool = True
     strict_company_mode: bool = True
     advanced_spc_mode: bool = False
     aiag_vda_mode: bool = True
@@ -54,6 +60,11 @@ class SpcPolicyConfig:
         if stage == "mass_production":
             return self.cp_cpk_threshold, self.cp_cpk_threshold
         return self.pp_ppk_threshold, self.pp_ppk_threshold
+
+    def interpret_config(self) -> "SpcInterpretConfig":
+        from src.spc.spc_interpreter import config_from_rules_catalog
+
+        return config_from_rules_catalog()
 
     def primary_capability_metrics(self, stage: StageType) -> tuple[str, str]:
         """단계별 주 평가 지수 (폭, 중심)."""

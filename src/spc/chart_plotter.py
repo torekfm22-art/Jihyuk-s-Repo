@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from src.spc.chart_sigma_zones import iter_sigma_zone_lines
 from src.spc.statistics import ControlLimits, SpcAnalysisResult
 
 # 한글 폰트 (Windows)
@@ -14,8 +15,14 @@ plt.rcParams["font.family"] = "Malgun Gothic"
 plt.rcParams["axes.unicode_minus"] = False
 
 
+def _draw_sigma_zones(ax, cl: float, ucl: float, lcl: float) -> None:
+    for y_val, _ in iter_sigma_zone_lines(cl, ucl, lcl):
+        ax.axhline(y_val, color="#9ca3af", linestyle=":", linewidth=0.7, alpha=0.8, zorder=1)
+
+
 def _draw_limits(ax, cl: float, ucl: float, lcl: float, title: str, ylabel: str, x: np.ndarray, y: np.ndarray):
-    ax.plot(x, y, "o-", color="#2563eb", markersize=5, linewidth=1.2, label="측정값")
+    _draw_sigma_zones(ax, cl, ucl, lcl)
+    ax.plot(x, y, "o-", color="#2563eb", markersize=5, linewidth=1.2, label="측정값", zorder=3)
     ax.axhline(cl, color="#16a34a", linestyle="-", linewidth=1.5, label=f"CL={cl:.4f}")
     ax.axhline(ucl, color="#dc2626", linestyle="--", linewidth=1.2, label=f"UCL={ucl:.4f}")
     ax.axhline(lcl, color="#dc2626", linestyle="--", linewidth=1.2, label=f"LCL={lcl:.4f}")

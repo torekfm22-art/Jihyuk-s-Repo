@@ -61,12 +61,16 @@ class ExpertChartReview:
         return "\n".join(lines).strip()
 
 
-def _pct_outside_spec(data: np.ndarray, usl: float, lsl: float) -> tuple[float, float]:
+def _pct_outside_spec(
+    data: np.ndarray,
+    usl: float | None,
+    lsl: float | None,
+) -> tuple[float, float]:
     n = len(data)
     if n == 0:
         return 0.0, 0.0
-    above = float(np.sum(data > usl) / n * 100)
-    below = float(np.sum(data < lsl) / n * 100)
+    above = float(np.sum(data > usl) / n * 100) if usl is not None else 0.0
+    below = float(np.sum(data < lsl) / n * 100) if lsl is not None else 0.0
     return above, below
 
 
@@ -151,14 +155,29 @@ def _review_histogram(result: SpcAnalysisResult, data: np.ndarray) -> ChartRevie
 
     if cap:
         above, below = _pct_outside_spec(data, cap.usl, cap.lsl)
-        spec_center = (cap.usl + cap.lsl) / 2
-        offset = cap.mean - spec_center
-        half = (cap.usl - cap.lsl) / 2
-        if half > 0 and abs(offset) / half > 0.15:
-            watch.append(
-                f"평균이 규격 중심 대비 {offset:+.4f} 이탈 — 히스토그램 피크가 USL/LSL 중 한쪽에 치우쳤는지 확인"
-            )
-            status = "주의"
+        if cap.usl is not None and cap.lsl is not None:
+            spec_center = (cap.usl + cap.lsl) / 2
+            offset = cap.mean - spec_center
+            half = (cap.usl - cap.lsl) / 2
+            if half > 0 and abs(offset) / half > 0.15:
+                watch.append(
+                    f"평균이 규격 중심 대비 {offset:+.4f} 이탈 — 히스토그램 피크가 USL/LSL 중 한쪽에 치우쳤는지 확인"
+                )
+                status = "주의"
+        elif cap.usl is not None:
+            margin = cap.usl - cap.mean
+            if margin < 3 * cap.std_within:
+                watch.append(
+                    f"평균이 USL에 근접 (여유 {margin:.4f}) — 편측 상한 공차 중심 이탈 검토"
+                )
+                status = "주의"
+        elif cap.lsl is not None:
+            margin = cap.mean - cap.lsl
+            if margin < 3 * cap.std_within:
+                watch.append(
+                    f"평균이 LSL에 근접 (여유 {margin:.4f}) — 편측 하한 공차 중심 이탈 검토"
+                )
+                status = "주의"
         if above > 0 or below > 0:
             watch.append(f"규격 이탈 표본 비율: USL 초과 {above:.2f}%, LSL 미만 {below:.2f}%")
             status = "조치" if (above + below) > 1 else "주의"

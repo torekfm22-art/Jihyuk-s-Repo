@@ -1,0 +1,35 @@
+SPC 공정 안정성 점검 — 공장 배포 안내
+========================================
+
+[프로그램 개요]
+  · Streamlit 기반 UI (해석용 관리도 → 정규성 → 공정능력)
+  · SPC_공정안정성점검.exe 더블클릭 → 앱 창 실행
+  · Python 설치 불필요
+
+[타 PC 설치]
+  1) dist\SPC_공정안정성점검 폴더 전체를 USB/공유폴더로 복사
+  2) C: 또는 D: 로컬 경로에 압축 해제 (네트워크 드라이브 비권장)
+  3) SPC_공정안정성점검.exe 또는 RUN_SPC_공정안정성점검.bat 실행
+
+[폴더 구조]
+  SPC_공정안정성점검.exe   ← 실행
+  data\input\              ← Excel 샘플/입력 (선택)
+  data\output\             ← 보고서·차트 출력
+  config\spc_policy.yaml   ← 판정 기준
+
+[시스템 요구]
+  · Windows 10 / 11 (64bit)
+  · Microsoft Edge WebView2 (대부분 기본 설치됨)
+  · 메모리 4GB 이상 권장
+  · 방화벽: localhost(127.0.0.1) 허용 — 외부 네트워크 불필요
+
+[개발 PC에서 EXE 빌드]
+  build_streamlit_exe.bat 더블클릭
+
+[개발 PC에서 UI만 테스트]
+  streamlit run src/spc_streamlit/app.py
+  또는 run_spc_streamlit.bat
+
+[문의]
+  IT: WebView2 미설치 시 Edge 런타임 설치
+  실행 오류 시 data\output 쓰기 권한 확인

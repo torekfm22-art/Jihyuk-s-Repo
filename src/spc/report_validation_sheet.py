@@ -9,11 +9,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from src.spc.constants import A2, A3, C4, D2, I_MR_D2
 from src.spc.data_extractor import COLUMN_ALIASES, _col_key
+from src.spc.decision_models import SpcDecisionResult
+from src.spc.non_normal_validation import excel_non_normal_pp_formula, excel_non_normal_ppk_formula
 from src.spc.statistics import SpcAnalysisResult
 
 THIN = Side(style="thin", color="999999")
@@ -25,6 +28,9 @@ SECTION_FONT = Font(bold=True, size=10, color="1F4E79")
 
 SHEET_VALIDATION = "검증_수식연계"
 PARAM_ROW = 200
+INTERNAL_ANCHOR_ROW = PARAM_ROW + 12
+STDEV_ANCHOR_ROW = INTERNAL_ANCHOR_ROW
+NORM_ANCHOR_ROW = INTERNAL_ANCHOR_ROW + 1
 SAMPLE_SHEET_NAME = "채취표본"
 NORM_SHEET_NAME = "정규성검정"
 
@@ -38,6 +44,7 @@ _XLFN_FUNCTIONS: tuple[str, ...] = (
     "VAR.P",
     "NORM.S.DIST",
     "NORM.S.INV",
+    "PERCENTILE.INC",
     "CONFIDENCE.NORM",
     "CONFIDENCE.T",
 )
@@ -142,13 +149,20 @@ class ValidationFormulaContext:
     stdev_expr: str = "-"
     stdev_formula: str = "-"
     norm_pvalue_ref: str = "-"
+    population_std: bool = False
 
     @classmethod
-    def from_sheets(cls, sheets: dict[str, SheetMeta]) -> ValidationFormulaContext:
+    def from_sheets(
+        cls,
+        sheets: dict[str, SheetMeta],
+        *,
+        population_std: bool = False,
+    ) -> ValidationFormulaContext:
         sample = sheets.get(SAMPLE_SHEET_NAME)
         sample_range = sample.measurement_range_ref() if sample else None
         header = sample.resolve_measurement_header() if sample else None
-        stdev_expr = f"_xlfn.STDEV.S({sample_range})" if sample_range else "-"
+        stdev_fn = "STDEV.P" if population_std else "STDEV.S"
+        stdev_expr = f"_xlfn.{stdev_fn}({sample_range})" if sample_range else "-"
         stdev_formula = to_excel_storage_formula(stdev_expr) if sample_range else "-"
 
         norm = sheets.get(NORM_SHEET_NAME)
@@ -169,6 +183,7 @@ class ValidationFormulaContext:
             stdev_expr=stdev_expr,
             stdev_formula=stdev_formula,
             norm_pvalue_ref=norm_ref,
+            population_std=population_std,
         )
 
 
@@ -215,11 +230,28 @@ def _set_cell_formula(ws, address: str, formula: str) -> None:
     ws[address].value = _fx(formula)
 
 
+def _resolve_write_cell(ws, row: int, col: int):
+    """병합 영역이면 좌상단(쓰기 가능) 셀 반환."""
+    cell = ws.cell(row, col)
+    if not isinstance(cell, MergedCell):
+        return cell
+    for merged in ws.merged_cells.ranges:
+        if merged.min_row <= row <= merged.max_row and merged.min_col <= col <= merged.max_col:
+            return ws.cell(merged.min_row, merged.min_col)
+    return cell
+
+
+def _set_cell_value(ws, row: int, col: int, value) -> None:
+    _resolve_write_cell(ws, row, col).value = value
+
+
 def normalize_workbook_formulas(wb: Workbook) -> None:
     """저장 전 워크북 전체 수식 정규화 (@ 제거, _xlfn. 적용)."""
     for ws in wb.worksheets:
         for row in ws.iter_rows():
             for cell in row:
+                if isinstance(cell, MergedCell):
+                    continue
                 v = cell.value
                 if isinstance(v, str) and v.startswith("="):
                     cleaned = _fx(v)
@@ -379,8 +411,12 @@ def add_validation_sheet(
     wb: Workbook,
     result: SpcAnalysisResult,
     sheets: dict[str, SheetMeta],
+    decision: SpcDecisionResult | None = None,
 ) -> None:
-    ctx = ValidationFormulaContext.from_sheets(sheets)
+    ctx = ValidationFormulaContext.from_sheets(
+        sheets,
+        population_std=bool(result.metadata.get("population_std")),
+    )
     ws = wb.create_sheet(SHEET_VALIDATION, 2)
     ws["A1"] = "SPC 산출값 검증 · 데이터·수식 연계"
     ws["A1"].font = Font(bold=True, size=12, color="1F4E79")
@@ -409,6 +445,8 @@ def add_validation_sheet(
     row += 1
     row = _write_capability_block(ws, row, sheets, result)
     row += 1
+    row = _write_non_normal_capability_block(ws, row, sheets, result, ctx, decision)
+    row += 1
     _write_normality_block(ws, row, sheets, result, ctx)
     _pin_fixed_validation_cells(ws, ctx)
     normalize_workbook_formulas(wb)
@@ -418,26 +456,44 @@ def add_validation_sheet(
 
 
 def _pin_fixed_validation_cells(ws, ctx: ValidationFormulaContext) -> None:
-    """고정 셀(C17, B204, C44) 수식 — 보고서 레이아웃 기준 (=STDEV.S, @ 없음)."""
+    """검증 수식 고정 앵커 — PARAM_ROW 하단 전용 (동적 검증표와 겹치지 않음)."""
+    label_row = INTERNAL_ANCHOR_ROW - 1
+    lbl = _resolve_write_cell(ws, label_row, 1)
+    lbl.value = "※ 내부 수식 앵커 (자동 — 레이아웃 변경 금지)"
+    lbl.font = Font(italic=True, size=9)
+
+    stdev_c = f"C{STDEV_ANCHOR_ROW}"
+    stdev_d = f"D{STDEV_ANCHOR_ROW}"
+    norm_c = f"C{NORM_ANCHOR_ROW}"
+    norm_d = f"D{NORM_ANCHOR_ROW}"
+    norm_g = f"G{NORM_ANCHOR_ROW}"
+
     if ctx.stdev_formula != "-":
         stdev = _fx(ctx.stdev_formula)
-        ws["C17"].value = stdev
-        ws["B204"].value = stdev
-    d17 = ws["D17"].value
-    if d17 is None or d17 == "-" or (isinstance(d17, str) and d17.startswith("=C")):
-        ws["D17"] = "=C17"
+        _set_cell_value(ws, STDEV_ANCHOR_ROW, 2, "σ_overall (STDEV.P)" if ctx.population_std else "σ_overall (STDEV.S)")
+        _set_cell_value(ws, STDEV_ANCHOR_ROW, 3, stdev)
+        d_stdev = _resolve_write_cell(ws, STDEV_ANCHOR_ROW, 4)
+        if d_stdev.value is None or d_stdev.value == "-" or (
+            isinstance(d_stdev.value, str) and str(d_stdev.value).startswith(f"={stdev_c}")
+        ):
+            d_stdev.value = f"={stdev_c}"
 
     if ctx.norm_pvalue_ref != "-":
-        ws["C44"] = _fx(ctx.norm_pvalue_ref)
-    d44 = ws["D44"].value
-    if d44 is None or d44 == "-" or (isinstance(d44, str) and d44.startswith("=C")):
-        ws["D44"] = "=C44"
+        _set_cell_value(ws, NORM_ANCHOR_ROW, 2, "정규성 p-value")
+        _set_cell_value(ws, NORM_ANCHOR_ROW, 3, _fx(ctx.norm_pvalue_ref))
+        d_norm = _resolve_write_cell(ws, NORM_ANCHOR_ROW, 4)
+        if d_norm.value is None or d_norm.value == "-" or (
+            isinstance(d_norm.value, str) and str(d_norm.value).startswith(f"={norm_c}")
+        ):
+            d_norm.value = f"={norm_c}"
+
     note = (
-        "Excel 기본 함수에 Shapiro-Wilk 없음 → 정규성검정 시트 p_value(C2) 참조. "
+        "Excel 기본 함수에 Shapiro-Wilk 없음 → 정규성검정 시트 p_value 참조. "
         "동일 p-value는 프로그램( scipy ) 산출값입니다."
     )
-    if not ws["G44"].value or "Shapiro" not in str(ws["G44"].value):
-        ws["G44"] = note
+    g_cell = _resolve_write_cell(ws, NORM_ANCHOR_ROW, 7)
+    if not g_cell.value or "Shapiro" not in str(g_cell.value):
+        g_cell.value = note
 
 
 def _write_linkage_map(
@@ -457,7 +513,8 @@ def _write_linkage_map(
         ("Subgroup Xbar / R / S", "Subgroup통계", "Xbar·R 또는 S", "X-bar 관리도"),
         ("I / MR", "Individual통계", "I·MR 열", "I-MR 관리도"),
         ("관리한계", "관리한계", "차트·항목별 행", "AIAG 상수"),
-        ("Cp/Cpk/Pp/Ppk", cap, f"행{PARAM_ROW} 기준값·수식", "본 시트 §4"),
+        ("Cp/Cpk/Pp/Ppk", cap, f"행{PARAM_ROW} 기준값·수식", "본 시트 §4 (정규)"),
+        ("Primary KPI (Non-normal)", cap, "본 시트 §4b", "percentile Ppk/Cpk"),
         ("정규성", NORM_SHEET_NAME, ctx.norm_pvalue_ref, "p-value 열 자동 탐지"),
     ]:
         for i, val in enumerate([a, b, c, d], 1):
@@ -482,7 +539,7 @@ def _write_sample_stats_block(
     items = [
         ("표본수 n", result.normality.n, f"COUNT({rng})", rng),
         ("평균 Mean", cap.mean if cap else None, f"AVERAGE({rng})", rng),
-        ("σ_overall STDEV.S", cap.std_overall if cap else None, _stdev_sample_formula(ctx), rng),
+        ("σ_overall STDEV.P" if ctx.population_std else "σ_overall STDEV.S", cap.std_overall if cap else None, _stdev_sample_formula(ctx), rng),
     ]
     for label, py, fn, note in items:
         row = _append_validation_row(ws, row, label=label, python_val=py, formula=fn, link_note=note)
@@ -618,19 +675,34 @@ def _safe_div(numer: str, denom: str) -> str:
     return f"IF(({denom})=0,0,({numer})/({denom}))"
 
 
-def _write_capability_block(ws, row: int, sheets: dict[str, SheetMeta], result: SpcAnalysisResult) -> int:
-    row = _write_section_title(ws, row, "4. 공정능력 지표 검증 (AIAG 수식)")
-    row = _validation_table_header(ws, row)
-
-    cap = result.capability
-    if not cap:
-        ws.cell(row, 1, "USL/LSL 미지정")
-        return row + 1
-
+def _capability_validation_checks(cap) -> list[tuple[str, float, str, str]]:
+    """공차 유형별 검증 행 (label, python_val, excel_formula, note)."""
     r0 = PARAM_ROW
     usl, lsl, mean, sw, so = f"$B${r0}", f"$B${r0 + 1}", f"$B${r0 + 2}", f"$B${r0 + 3}", f"$B${r0 + 4}"
+    spec = getattr(cap, "spec_type", "two_sided")
 
-    checks = [
+    if spec == "upper_only":
+        cwu = _safe_div(f"({usl}-{mean})", f"3*{sw}")
+        ppu = _safe_div(f"({usl}-{mean})", f"3*{so}")
+        return [
+            ("Cpk (CWU)", cap.cpk, cwu, "Cpu=(USL−Mean)/(3σ_within) — 편측 상한"),
+            ("Cpu (CWU)", cap.cpu, cwu, "동일 — 상한 여유 지수"),
+            ("Ppk (Ppu)", cap.ppk, ppu, "Ppu=(USL−Mean)/(3σ_overall)"),
+            ("Pp (편측)", cap.pp, "-", "편측 공차 — Pp/Cp 미산출"),
+            ("Cp (편측)", cap.cp, "-", "편측 공차 — Cp 미산출"),
+        ]
+    if spec == "lower_only":
+        cwl = _safe_div(f"({mean}-{lsl})", f"3*{sw}")
+        ppl = _safe_div(f"({mean}-{lsl})", f"3*{so}")
+        return [
+            ("Cpk (CWL)", cap.cpk, cwl, "Cpl=(Mean−LSL)/(3σ_within) — 편측 하한"),
+            ("Cpl (CWL)", cap.cpl, cwl, "동일 — 하한 여유 지수"),
+            ("Ppk (Ppl)", cap.ppk, ppl, "Ppl=(Mean−LSL)/(3σ_overall)"),
+            ("Pp (편측)", cap.pp, "-", "편측 공차 — Pp/Cp 미산출"),
+            ("Cp (편측)", cap.cp, "-", "편측 공차 — Cp 미산출"),
+        ]
+
+    return [
         ("Cp", cap.cp, _safe_div(f"({usl}-{lsl})", f"6*{sw}"), "6*sigma_within"),
         ("Cpu", cap.cpu, _safe_div(f"({usl}-{mean})", f"3*{sw}"), "3*sigma_within"),
         ("Cpl", cap.cpl, _safe_div(f"({mean}-{lsl})", f"3*{sw}"), "3*sigma_within"),
@@ -645,11 +717,27 @@ def _write_capability_block(ws, row: int, sheets: dict[str, SheetMeta], result: 
             "Ppk",
             cap.ppk,
             f"MIN({_safe_div(f'({usl}-{mean})', f'3*{so}')},{_safe_div(f'({mean}-{lsl})', f'3*{so}')})",
-            "min(Ppu,Ppl)",
+            "min(Ppu,Ppl) — 정규 σ_overall",
         ),
     ]
+
+
+def _write_capability_block(ws, row: int, sheets: dict[str, SheetMeta], result: SpcAnalysisResult) -> int:
+    row = _write_section_title(ws, row, "4. 공정능력 지표 검증 (AIAG 수식)")
+    row = _validation_table_header(ws, row)
+
+    cap = result.capability
+    if not cap:
+        ws.cell(row, 1, "USL/LSL 미지정")
+        return row + 1
+
+    checks = _capability_validation_checks(cap)
     for label, py, fn, note in checks:
-        sheet_val = _cell_ref(sheets, "공정능력", label)
+        if fn == "-":
+            continue
+        if isinstance(py, float) and (py != py):  # NaN
+            continue
+        sheet_val = _cell_ref(sheets, "공정능력", label.split()[0])
         row = _append_validation_row(
             ws,
             row,
@@ -669,6 +757,83 @@ def _write_capability_block(ws, row: int, sheets: dict[str, SheetMeta], result: 
             tol=0.0002,
         )
     return row
+
+
+def _write_non_normal_capability_block(
+    ws,
+    row: int,
+    sheets: dict[str, SheetMeta],
+    result: SpcAnalysisResult,
+    ctx: ValidationFormulaContext,
+    decision: SpcDecisionResult | None,
+) -> int:
+    cap_dec = decision.capability if decision else None
+    if not cap_dec or not cap_dec.non_normal_applied or not result.capability:
+        return row
+
+    row = _write_section_title(ws, row, "4b. Primary KPI — Non-normal Pp/Ppk (percentile)")
+    row = _validation_table_header(ws, row)
+
+    sample_rng = _sample_value_range(ctx)
+    if not sample_rng:
+        ws.cell(row, 1, "(채취표본 범위 없음)")
+        return row + 1
+
+    r0 = PARAM_ROW
+    usl, lsl = f"$B${r0}", f"$B${r0 + 1}"
+    spec_type = result.capability.spec_type if result.capability else "two_sided"
+    ppk_fn = excel_non_normal_ppk_formula(sample_rng, usl, lsl, spec_type=spec_type)
+    pp_fn = excel_non_normal_pp_formula(sample_rng, usl, lsl, spec_type=spec_type)
+
+    if cap_dec.primary_kpi == "Ppk":
+        py_ppk = cap_dec.ppk_non_normal if cap_dec.ppk_non_normal is not None else cap_dec.primary_kpi_value
+        py_pp = cap_dec.pp_non_normal
+        row = _append_validation_row(
+            ws,
+            row,
+            label="Primary KPI — Ppk (Non-normal)",
+            python_val=py_ppk,
+            formula=ppk_fn,
+            link_note=f"{sample_rng}; COUNTIF+NORM.S.INV",
+            tol=0.001,
+        )
+        if py_pp is not None:
+            row = _append_validation_row(
+                ws,
+                row,
+                label="Pp (Non-normal 참고)",
+                python_val=py_pp,
+                formula=pp_fn,
+                link_note="PERCENTILE.INC spread",
+                tol=0.001,
+            )
+    else:
+        py_cpk = cap_dec.cpk_non_normal if cap_dec.cpk_non_normal is not None else cap_dec.primary_kpi_value
+        py_cp = cap_dec.cp_non_normal
+        row = _append_validation_row(
+            ws,
+            row,
+            label="Primary KPI — Cpk (Non-normal)",
+            python_val=py_cpk,
+            formula=ppk_fn,
+            link_note="percentile Cpk (동일 엔진)",
+            tol=0.001,
+        )
+        if py_cp is not None:
+            row = _append_validation_row(
+                ws,
+                row,
+                label="Cp (Non-normal 참고)",
+                python_val=py_cp,
+                formula=pp_fn,
+                link_note="PERCENTILE spread",
+                tol=0.001,
+            )
+
+    ws.cell(row, 1, "※ 정규 Ppk/Cpk는 §4 참고. Primary KPI는 비정규 percentile 기준입니다.").font = Font(
+        italic=True, size=9
+    )
+    return row + 1
 
 
 def _write_normality_block(

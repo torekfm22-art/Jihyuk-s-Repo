@@ -13,28 +13,35 @@ from src.spc.decision_models import (
 from src.spc.policy_config import SpcPolicyConfig
 from src.spc.rule_engine import (
     infer_capability_label,
+    infer_cp_cpk_validity_label,
     infer_deploy_label,
     infer_normality_label,
     infer_stability_label,
 )
 
 
+def _fmt_kpi(val: float | None, digits: int = 3) -> str:
+    if val is None:
+        return "N/A"
+    return f"{val:.{digits}f}"
+
+
 class CommentaryTemplates:
     """한국어 문구 중앙 관리."""
 
     STABLE_OK = (
-        "해석용 관리도 기준으로 공정이 통계적 안정 상태로 판단됩니다. "
-        "특별원인 신호가 뚜렷하지 않으므로 현 관리한계선을 유지하며 정기 모니터링을 권장합니다."
+        "해석용 관리도 기준으로 공정이 Stable (In Control) 상태입니다. "
+        "특별원인 신호가 뚜렷하지 않으므로 Cp/Cpk 기반 공정능력 평가가 유효하며, "
+        "현 관리한계선을 유지하며 정기 모니터링을 권장합니다."
     )
     UNSTABLE_R_FIRST = (
-        "본 공정은 해석용 관리도 기준으로 안정상태가 확인되지 않았습니다. "
-        "특히 산포 관리도에서 이상신호가 확인되어 현재 관리한계선을 기반으로 한 현장 운영은 부적절합니다. "
-        "이 경우 평균 위치 해석보다 산포 원인 제거가 우선이며, 공정 안정화 후 재수집 데이터를 기준으로 "
-        "관리한계선을 다시 설정해야 합니다."
+        "본 공정은 Unstable (Out of Control) 상태입니다. "
+        "산포 관리도(R/S/MR)에서 이상신호가 확인되어 Cp/Cpk는 Invalid이며 참고용으로만 표시합니다. "
+        "Ppk 기준 공정 성능 평가를 우선하고, 산포 원인 제거 후 재수집·관리한계 재설정이 필요합니다."
     )
     UNSTABLE_GENERAL = (
-        "관리도에서 이상 패턴 또는 관리한계 이탈이 확인되었습니다. "
-        "공정이 안정 상태가 아니므로 현장 관리용 관리도 적용이 제한됩니다. "
+        "관리도에서 회사 표준(첨부#2) 이상 패턴 또는 관리한계 이탈이 확인되었습니다. "
+        "공정이 Unstable (Out of Control)이므로 Cp/Cpk 사용이 금지되며 Ppk 중심 성능 판단을 적용합니다. "
         "이탈 시점의 4M1E 변경 이력을 확인하고 원인 제거 후 재수집이 필요합니다."
     )
     CAPABILITY_MAINTAIN = (
@@ -94,22 +101,28 @@ def build_expert_commentary(
     comp = decision.compliance
     meta = decision.metadata
 
-    # 경영진 요약
+    # 경영진 요약 — [1]공정상태 → [2]정규성 → [3]Primary KPI 순서
     exec_parts: list[str] = []
-    if ctrl.status == "deferred":
+    if ctrl.r_chart_status == "unstable" or ctrl.mean_chart_status == "deferred":
         exec_parts.append(CommentaryTemplates.UNSTABLE_R_FIRST)
     elif ctrl.status == "unstable":
         exec_parts.append(CommentaryTemplates.UNSTABLE_GENERAL)
     else:
         exec_parts.append(CommentaryTemplates.STABLE_OK)
 
+    if norm.non_normal_detected and norm.applied_action:
+        exec_parts.append(norm.applied_action)
+
     if cap:
-        if cap.improvement_focus == "variation":
-            exec_parts.append(CommentaryTemplates.CAPABILITY_VARIATION)
-        elif cap.improvement_focus == "centering":
-            exec_parts.append(CommentaryTemplates.CAPABILITY_CENTERING)
-        elif cap.improvement_focus == "maintain_monitor":
-            exec_parts.append(CommentaryTemplates.CAPABILITY_MAINTAIN)
+        exec_parts.append(f"Primary KPI: {cap.primary_kpi_label}")
+        if not cap.cp_cpk_valid:
+            cpk_ref = _fmt_kpi(cap.cpk)
+            exec_parts.append(f"Cp/Cpk: {cap.cp_cpk_validity_note} (참고: Cpk={cpk_ref}, Ppk={_fmt_kpi(cap.ppk)})")
+        if cap.cpk_ppk_gap is not None:
+            exec_parts.append(
+                f"Cpk−Ppk Gap={cap.cpk_ppk_gap:.3f} → {cap.gap_interpretation}"
+            )
+        exec_parts.append(cap.process_level)
 
     if meta.special_characteristic:
         if cap and cap.capability_status == "insufficient":
@@ -124,20 +137,42 @@ def build_expert_commentary(
     executive = " ".join(exec_parts[:5])
 
     # 관리도 코멘트
-    if ctrl.detected_patterns:
+    if ctrl.western_electric_violations:
+        we_lines = [
+            f"{v.rule_id}: {v.occurrence_count}회 (subgroup {', '.join(str(p) for p in v.affected_subgroups[:5])})"
+            for v in ctrl.western_electric_violations
+        ]
+        ctrl_comment = (
+            f"회사 표준 이상 패턴 {len(ctrl.western_electric_violations)}건 — "
+            + "; ".join(we_lines[:4])
+            + f". {ctrl.recommendation}"
+        )
+    elif ctrl.detected_patterns:
         names = ", ".join(p.pattern_name_ko for p in ctrl.detected_patterns[:3])
         ctrl_comment = (
             f"관리도에서 {names} 등 {len(ctrl.detected_patterns)}건의 이상 패턴이 감지되었습니다. "
             f"{ctrl.recommendation}"
         )
     elif ctrl.is_stable:
-        ctrl_comment = "관리한계 내에서 운영되고 있으며, 해석용 관리도 기준 안정 상태입니다."
+        ctrl_comment = "Stable (In Control) — 관리한계 내 운영, Cp/Cpk 평가 유효."
     else:
         ctrl_comment = ctrl.recommendation
 
     # 정규성 코멘트
     if norm.normality_state == "normal":
         norm_comment = CommentaryTemplates.NORM_NORMAL
+    elif norm.normality_state == "undetermined":
+        qq_msg = norm.qqplot_assessment.get("message", "")
+        norm_comment = (
+            "정규성 검정을 신뢰할 수 없습니다. "
+            f"{qq_msg or '측정값 산포·표본수·값 열 매핑을 확인하십시오.'}"
+        )
+    elif norm.normality_state == "borderline_non_normal" and norm.is_normal:
+        qq_msg = norm.qqplot_assessment.get("message", "")
+        norm_comment = (
+            "Shapiro-Wilk 검정은 정규(p-value≥α)이나 QQ plot에서 경미한 이탈이 있습니다. "
+            f"히스토그램·QQ plot을 교차 확인하십시오. ({qq_msg})"
+        )
     elif policy.strict_company_mode and not policy.advanced_spc_mode:
         norm_comment = (
             f"{CommentaryTemplates.NORM_STRICT} "
@@ -148,28 +183,41 @@ def build_expert_commentary(
     else:
         norm_comment = norm.handling_recommendation
 
-    # 공정능력 코멘트
+    # 공정능력 코멘트 — 안정성 우선 분기
     cap_parts: list[str] = []
-    if meta.stage == "mass_production":
-        cap_parts.append("현재 지표는 Cp/Cpk 기준 잠재 공정능력 해석이 중심입니다.")
-        if cap and not cap.cp_meaningful:
-            cap_parts.append("단측 규격이므로 Cp는 참고하지 않으며 Cpk 중심으로 판정합니다.")
-    else:
-        cap_parts.append(
-            "현재 지표는 Ppk/Pp 기준으로 해석해야 하며, 초기/선행 단계 전체 변동을 반영한 결과입니다."
-        )
-
     if cap:
+        cp_ref = _fmt_kpi(cap.cp)
+        cpk_ref = _fmt_kpi(cap.cpk)
+        pp_ref = _fmt_kpi(cap.pp)
+        if cap.primary_kpi == "Ppk":
+            cap_parts.append(
+                "공정 불안정 또는 Cp/Cpk 무효 → Ppk 기준 공정 성능(Performance) 평가가 Primary입니다."
+            )
+            cap_parts.append(f"Ppk={_fmt_kpi(cap.ppk)}, Pp={pp_ref}")
+            if cap.cp_cpk_valid:
+                cap_parts.append(f"Cp/Cpk: Cp={cp_ref}, Cpk={cpk_ref} — {cap.cp_cpk_validity_note}")
+            else:
+                cap_parts.append(
+                    f"Cp/Cpk 미산출 (비관리상태 또는 유효조건 미충족) — {cap.cp_cpk_validity_note}"
+                )
+        elif meta.stage == "mass_production":
+            cap_parts.append("Stable (In Control) → Cp/Cpk 기반 공정능력(Capability) 평가가 Primary입니다.")
+            cap_parts.append(f"Cp={cp_ref}, Cpk={cpk_ref} (기준≥{policy.cp_cpk_threshold})")
+            if not cap.cp_meaningful:
+                cap_parts.append("단측 규격 — Cpk 중심 판정.")
+        else:
+            cap_parts.append("초기/선행 단계 — Pp/Ppk 기준 전체 변동 반영 평가.")
+            cap_parts.append(f"Pp={pp_ref}, Ppk={_fmt_kpi(cap.ppk)} (기준≥{policy.pp_ppk_threshold})")
+
+        if cap.cpk_ppk_gap is not None:
+            cap_parts.append(f"Gap(Cpk−Ppk)={cap.cpk_ppk_gap:.3f}: {cap.gap_interpretation}")
+
         if cap.improvement_focus == "centering":
             cap_parts.append(CommentaryTemplates.CAPABILITY_CENTERING)
         elif cap.improvement_focus == "variation":
             cap_parts.append(CommentaryTemplates.CAPABILITY_VARIATION)
         elif cap.improvement_focus == "maintain_monitor":
             cap_parts.append(CommentaryTemplates.CAPABILITY_MAINTAIN)
-        if cap.metric_basis == "CpCpk":
-            cap_parts.append(f"Cp={cap.cp:.3f}, Cpk={cap.cpk:.3f} (기준 Cp/Cpk≥{policy.cp_cpk_threshold})")
-        else:
-            cap_parts.append(f"Pp={cap.pp:.3f}, Ppk={cap.ppk:.3f} (기준 Pp/Ppk≥{policy.pp_ppk_threshold})")
 
     capability_comment = " ".join(cap_parts)
 
@@ -184,7 +232,7 @@ def build_expert_commentary(
     )
 
     # 현장 실무자 코멘트
-    if ctrl.status in ("unstable", "deferred"):
+    if ctrl.status == "unstable" or ctrl.r_chart_status == "unstable":
         if ctrl.r_chart_status == "unstable":
             field_comment = CommentaryTemplates.FIELD_VARIATION
         else:
@@ -207,7 +255,7 @@ def build_expert_commentary(
 
 
 def build_verdict_summary(decision: SpcDecisionResult) -> VerdictSummary:
-    """자동 판정 요약."""
+    """자동 판정 요약 — AIAG-VDA 권고 표시 순서."""
     ctrl = decision.control_chart
     norm = decision.normality
     cap = decision.capability
@@ -215,10 +263,30 @@ def build_verdict_summary(decision: SpcDecisionResult) -> VerdictSummary:
 
     priority = comp.priority_actions[0] if comp.priority_actions else "현상 유지"
 
+    primary_kpi = cap.primary_kpi_label if cap else "—"
+    cp_cpk_validity = (
+        infer_cp_cpk_validity_label(cap.cp_cpk_valid, cap.cp_cpk_validity_note)
+        if cap
+        else "—"
+    )
+    process_level = cap.process_level if cap else "—"
+    subgroup_rat = "Rational Subgroup (OK)"
+    if hasattr(decision, "metadata"):
+        pass
+    for entry in ctrl.decision_log:
+        if entry.rule_id == "SUBGROUP_RATIONALITY" and "Invalid" in entry.message:
+            subgroup_rat = "Invalid Subgroup (Non-rational subgroup)"
+            break
+
     return VerdictSummary(
         process_stability=infer_stability_label(ctrl.status),
         normality_verdict=infer_normality_label(norm.normality_state),
+        primary_kpi=primary_kpi,
+        cp_cpk_validity=cp_cpk_validity,
         capability_verdict=infer_capability_label(cap.capability_status if cap else "undetermined"),
+        process_level=process_level,
+        subgroup_rationality=subgroup_rat,
+        western_electric_summary=ctrl.western_electric_summary or "위반 없음",
         control_chart_deploy=infer_deploy_label(comp.can_deploy_control_chart),
         priority_action=priority,
     )

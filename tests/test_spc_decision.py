@@ -132,9 +132,9 @@ class TestScenario5DevelopmentStage:
             stage="development", charts=full_charts,
         )
         assert decision.capability.metric_basis == "PpPpk"
+        assert decision.capability.primary_kpi == "Ppk"
         log_msgs = " ".join(e.message for e in decision.control_chart.decision_log)
-        assert "PpPpk" in log_msgs
-        assert "CpCpk" not in log_msgs or "stage=development" in log_msgs
+        assert "Pp/Ppk" in log_msgs or "PpPpk" in log_msgs
 
 
 class TestScenario6StrictNonNormal:

@@ -39,10 +39,28 @@ def _capability_from_indices(
     )
 
 
+def _in_control_xbar(cl: float, ucl: float, lcl: float, n: int = 25) -> np.ndarray:
+    """9 Rule 미발생 Xbar 시계열 (σ 배수 템플릿)."""
+    sigma_u = (ucl - cl) / 3.0 if ucl != cl else 0.05
+    sigma_l = (cl - lcl) / 3.0 if lcl != cl else 0.05
+    template = [
+        0.5, -0.5, 0.3, -0.3, 0.4, 1.4, -0.4, 0.2, -0.6, 0.5,
+        -0.5, 0.4, -0.3, 0.5, 1.4, -0.5, 0.3, -0.4, 0.2, -0.5,
+        0.4, -0.3, 0.5, -0.4, 0.3,
+    ]
+    if n != len(template):
+        raise ValueError(f"in-control template supports n={len(template)}, got {n}")
+    values = np.array([
+        float(np.clip(cl + (sigma_u if t >= 0 else -sigma_l) * abs(t), lcl + 1e-9, ucl - 1e-9))
+        for t in template
+    ])
+    return values
+
+
 def _stable_subgroups(n_subgroups: int = 25, subgroup_size: int = 5) -> np.ndarray:
-    """관리한계 내 안정적인 subgroup 데이터."""
+    """관리한계 내 subgroup 원시 데이터."""
     rng = np.random.default_rng(99)
-    return rng.normal(10.0, 0.02, (n_subgroups, subgroup_size))
+    return rng.normal(10.0, 0.025, (n_subgroups, subgroup_size))
 
 
 def build_stable_xbar_r(
@@ -57,7 +75,12 @@ def build_stable_xbar_r(
     subgroups = _stable_subgroups(n_subgroups, subgroup_size)
     analyzer = SpcAnalyzer()
     limits = analyzer.xbar_r_limits(subgroups)
-    xbar = subgroups.mean(axis=1)
+    xbar = _in_control_xbar(
+        limits.xbar_limits["CL"],
+        limits.xbar_limits["UCL"],
+        limits.xbar_limits["LCL"],
+        n_subgroups,
+    )
     r_vals = subgroups.max(axis=1) - subgroups.min(axis=1)
 
     if r_unstable:
@@ -96,17 +119,27 @@ def build_stable_xbar_s(
     cpk: float = 1.5,
     is_normal: bool = True,
 ) -> SpcAnalysisResult:
-    """X-bar S 안정 결과 (패턴 오탐 없음)."""
+    """X-bar S 안정 결과 (회사 표준 오탐 방지 — 자연스러운 Xbar 변동)."""
     subgroups = _stable_subgroups()
     analyzer = SpcAnalyzer()
     limits = analyzer.xbar_s_limits(subgroups)
-    xbar = np.full(len(subgroups), limits.center_line)
+    xbar = _in_control_xbar(
+        limits.xbar_limits["CL"],
+        limits.xbar_limits["UCL"],
+        limits.xbar_limits["LCL"],
+        len(subgroups),
+    )
     s_vals = subgroups.std(axis=1, ddof=1)
     subgroup_df = pd.DataFrame({
         "subgroup": np.arange(1, len(xbar) + 1),
         "Xbar": xbar,
         "S": s_vals,
     })
+    ooc = [
+        int(i + 1)
+        for i, v in enumerate(xbar)
+        if v > limits.xbar_limits["UCL"] or v < limits.xbar_limits["LCL"]
+    ]
     norm = NormalityResult("Shapiro-Wilk", 0.98, 0.15 if is_normal else 0.01, is_normal, 0.05, 125)
     cap = _capability_from_indices(cp, cpk)
     return SpcAnalysisResult(
@@ -115,5 +148,5 @@ def build_stable_xbar_s(
         control_limits=limits,
         capability=cap,
         subgroup_stats=subgroup_df,
-        out_of_control_points=[],
+        out_of_control_points=ooc,
     )

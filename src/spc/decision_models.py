@@ -59,19 +59,61 @@ class AnalysisMetadata:
 
 
 @dataclass
+class CompanyRuleSummary:
+    rule_id: str
+    rule_name: str
+    occurrence_count: int
+    affected_subgroups: list[int]
+    cause_codes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class CompanyChartDecision:
+    status: str
+    detected_rules: list[dict[str, Any]]
+    summary_message: str
+    actions: list[str]
+    mean_chart_deferred: bool = False
+    dispersion_abnormal: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class WesternElectricViolationSummary:
+    rule_id: str
+    rule_name: str
+    occurrence_count: int
+    affected_subgroups: list[int]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class ControlChartDecision:
     is_stable: bool
     status: StabilityStatus
     r_chart_status: StabilityStatus | None
     mean_chart_status: StabilityStatus | None
     detected_patterns: list[DetectedPattern]
+    western_electric_violations: list[WesternElectricViolationSummary]
+    western_electric_summary: str
     decision_log: list[DecisionLogEntry]
     recommendation: str
+    company_interpretation: CompanyChartDecision | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["detected_patterns"] = [p.to_dict() for p in self.detected_patterns]
+        d["western_electric_violations"] = [v.to_dict() for v in self.western_electric_violations]
         d["decision_log"] = [e.to_dict() for e in self.decision_log]
+        if self.company_interpretation:
+            d["company_interpretation"] = self.company_interpretation.to_dict()
         return d
 
 
@@ -84,6 +126,14 @@ class NormalityDecision:
     normality_state: NormalityState
     qqplot_assessment: dict[str, Any]
     handling_recommendation: str
+    non_normal_detected: bool = False
+    applied_action: str | None = None
+    transform_method: str | None = None
+    transform_success: bool = False
+    transform_p_value_after: float | None = None
+    transform_detail: str | None = None
+    transform_attempts: list[dict[str, Any]] = field(default_factory=list)
+    transform_summary: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -92,6 +142,11 @@ class NormalityDecision:
 @dataclass
 class CapabilityDecision:
     metric_basis: Literal["CpCpk", "PpPpk"]
+    primary_kpi: str
+    primary_kpi_value: float | None
+    primary_kpi_label: str
+    cp_cpk_valid: bool
+    cp_cpk_validity_note: str
     cp: float | None
     cpk: float | None
     pp: float | None
@@ -100,11 +155,31 @@ class CapabilityDecision:
     cpl: float | None
     ppu: float | None
     ppl: float | None
+    cpk_ppk_gap: float | None
+    gap_interpretation: str
+    process_level: str
     is_capable: bool
     capability_status: CapabilityStatus
     improvement_focus: str | None
     recommendation: str
     cp_meaningful: bool = True
+    capability_case: str = ""
+    analysis_method: str = ""
+    analysis_method_rationale: str = ""
+    follow_up_priorities: list[str] = field(default_factory=list)
+    non_normal_applied: bool = False
+    pp_non_normal: float | None = None
+    ppk_non_normal: float | None = None
+    cp_non_normal: float | None = None
+    cpk_non_normal: float | None = None
+    normality_transform_method: str | None = None
+    capability_on_transformed: bool = False
+    cp_raw_reference: float | None = None
+    cpk_raw_reference: float | None = None
+    pp_raw_reference: float | None = None
+    ppk_raw_reference: float | None = None
+    cp_reference: float | None = None
+    cpk_reference: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -185,7 +260,12 @@ class ExpertCommentary:
 class VerdictSummary:
     process_stability: str
     normality_verdict: str
+    primary_kpi: str
+    cp_cpk_validity: str
     capability_verdict: str
+    process_level: str
+    subgroup_rationality: str
+    western_electric_summary: str
     control_chart_deploy: str
     priority_action: str
 

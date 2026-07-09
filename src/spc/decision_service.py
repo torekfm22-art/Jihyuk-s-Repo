@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 import numpy as np
+import pandas as pd
 
 from src.spc.commentary_engine import build_expert_commentary, build_verdict_summary
 from src.spc.decision_models import AnalysisMetadata, SpcDecisionResult
@@ -39,6 +40,7 @@ class SpcDecisionInput:
     lsl: float | None = None
     subgroup_size: int | None = None
     sample_group_count: int | None = None
+    sample_df: pd.DataFrame | None = None
     charts: ChartPaths | None = None
     policy: SpcPolicyConfig | None = None
 
@@ -86,6 +88,7 @@ class SpcDecisionService:
             metadata=metadata,
             raw_data=raw,
             qq_assessment=qq,
+            sample_df=inp.sample_df,
         )
         state = run_rules(ctx)
 
@@ -112,7 +115,7 @@ class SpcDecisionService:
             compliance=compliance,
             aiag_vda_extensions=aiag,
             expert_commentary=ExpertCommentary("", "", "", "", "", ""),
-            verdict_summary=VerdictSummary("", "", "", "", ""),
+            verdict_summary=VerdictSummary("", "", "", "", "", "", "", "", "", ""),
         )
         commentary = build_expert_commentary(
             partial,

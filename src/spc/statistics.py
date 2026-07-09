@@ -15,6 +15,29 @@ from src.spc.constants import A2, A3, B3, B4, C4, D2, D3, D4, I_MR_D2, I_MR_D4
 
 logger = logging.getLogger(__name__)
 
+SpecType = Literal["two_sided", "upper_only", "lower_only"]
+
+
+def infer_spec_type(usl: float | None, lsl: float | None) -> SpecType:
+    """공차 유형 — 양측 / 상한만 / 하한만."""
+    if usl is not None and lsl is not None:
+        return "two_sided"
+    if usl is not None:
+        return "upper_only"
+    if lsl is not None:
+        return "lower_only"
+    return "two_sided"
+
+
+def _cap_nan() -> float:
+    return float("nan")
+
+
+def _cap_round(val: float, digits: int = 4) -> float | str:
+    if val is None or (isinstance(val, float) and np.isnan(val)):
+        return "—"
+    return round(val, digits)
+
 
 @dataclass
 class NormalityResult:
@@ -65,8 +88,8 @@ class ControlLimits:
 
 @dataclass
 class CapabilityResult:
-    usl: float
-    lsl: float
+    usl: float | None
+    lsl: float | None
     mean: float
     std_within: float
     std_overall: float
@@ -77,20 +100,22 @@ class CapabilityResult:
     cpu: float
     cpl: float
     ppm_est: float
+    spec_type: SpecType = "two_sided"
 
     def to_dict(self) -> dict:
         return {
-            "USL": self.usl,
-            "LSL": self.lsl,
+            "USL": self.usl if self.usl is not None else "—",
+            "LSL": self.lsl if self.lsl is not None else "—",
+            "공차유형": self.spec_type,
             "평균(Xbar)": round(self.mean, 6),
             "σ_within": round(self.std_within, 6),
             "σ_overall": round(self.std_overall, 6),
-            "Cp": round(self.cp, 4),
-            "Cpk": round(self.cpk, 4),
-            "Pp": round(self.pp, 4),
-            "Ppk": round(self.ppk, 4),
-            "Cpu": round(self.cpu, 4),
-            "Cpl": round(self.cpl, 4),
+            "Cp": _cap_round(self.cp),
+            "Cpk": _cap_round(self.cpk),
+            "Pp": _cap_round(self.pp),
+            "Ppk": _cap_round(self.ppk),
+            "Cpu/CWU": _cap_round(self.cpu),
+            "Cpl/CWL": _cap_round(self.cpl),
             "예상PPM": round(self.ppm_est, 2),
         }
 
@@ -110,8 +135,12 @@ class SpcAnalysisResult:
 class SpcAnalyzer:
     """정규성 → 관리도 → 공정능력 일괄 분석."""
 
-    def __init__(self, alpha: float = 0.05):
+    def __init__(self, alpha: float = 0.05, population_std: bool = False):
         self.alpha = alpha
+        self.population_std = population_std
+
+    def _analysis_metadata(self) -> dict:
+        return {"population_std": self.population_std}
 
     def test_normality(self, data: np.ndarray) -> NormalityResult:
         data = np.asarray(data, dtype=float)
@@ -211,19 +240,50 @@ class SpcAnalyzer:
     def capability(
         self,
         data: np.ndarray,
-        usl: float,
-        lsl: float,
-        sigma_within: float,
+        usl: float | None = None,
+        lsl: float | None = None,
+        sigma_within: float = 0,
     ) -> CapabilityResult:
+        """
+        공정능력 지표.
+
+        - 양측: Cp/Cpk, Pp/Ppk (표준)
+        - 상한만 (CWU): Cpk=Cpu=(USL−x̄)/(3σ_w), Ppk=Ppu
+        - 하한만 (CWL): Cpk=Cpl=(x̄−LSL)/(3σ_w), Ppk=Ppl
+        """
+        spec_type = infer_spec_type(usl, lsl)
         data = np.asarray(data, dtype=float)
         mean = float(np.mean(data))
-        std_overall = float(np.std(data, ddof=1)) if len(data) > 1 else 0.0
+        ddof = 0 if self.population_std else 1
+        std_overall = float(np.std(data, ddof=ddof)) if len(data) > 1 else 0.0
         std_w = sigma_within if sigma_within > 0 else std_overall
 
+        nan = _cap_nan()
         if std_w <= 0:
             cp = cpk = pp = ppk = cpu = cpl = 0.0
             ppm = 0.0
+        elif spec_type == "upper_only" and usl is not None:
+            cpu = (usl - mean) / (3 * std_w)
+            cpk = cpu
+            cpl = nan
+            cp = nan
+            ppu = (usl - mean) / (3 * std_overall) if std_overall > 0 else 0.0
+            ppk = ppu
+            pp = nan
+            z_usl = (usl - mean) / std_w
+            ppm = float(stats.norm.sf(z_usl)) * 1_000_000
+        elif spec_type == "lower_only" and lsl is not None:
+            cpl = (mean - lsl) / (3 * std_w)
+            cpk = cpl
+            cpu = nan
+            cp = nan
+            ppl = (mean - lsl) / (3 * std_overall) if std_overall > 0 else 0.0
+            ppk = ppl
+            pp = nan
+            z_lsl = (mean - lsl) / std_w
+            ppm = float(stats.norm.cdf(-z_lsl)) * 1_000_000
         else:
+            assert usl is not None and lsl is not None
             cp = (usl - lsl) / (6 * std_w)
             cpu = (usl - mean) / (3 * std_w)
             cpl = (mean - lsl) / (3 * std_w)
@@ -237,7 +297,10 @@ class SpcAnalyzer:
             z_lsl = (mean - lsl) / std_w
             ppm = (stats.norm.sf(z_usl) + stats.norm.cdf(-z_lsl)) * 1_000_000
 
-        return CapabilityResult(usl, lsl, mean, std_w, std_overall, cp, cpk, pp, ppk, cpu, cpl, ppm)
+        return CapabilityResult(
+            usl, lsl, mean, std_w, std_overall,
+            cp, cpk, pp, ppk, cpu, cpl, ppm, spec_type,
+        )
 
     def analyze_xbar_r(
         self,
@@ -264,8 +327,8 @@ class SpcAnalyzer:
         ]
 
         cap = None
-        if usl is not None and lsl is not None:
-            cap = self.capability(flat, usl, lsl, limits.sigma_estimate)
+        if usl is not None or lsl is not None:
+            cap = self.capability(flat, usl=usl, lsl=lsl, sigma_within=limits.sigma_estimate)
 
         return SpcAnalysisResult(
             chart_type="xbar_r",
@@ -274,6 +337,7 @@ class SpcAnalyzer:
             capability=cap,
             subgroup_stats=subgroup_df,
             out_of_control_points=ooc,
+            metadata=self._analysis_metadata(),
         )
 
     def analyze_xbar_s(
@@ -301,8 +365,8 @@ class SpcAnalyzer:
         ]
 
         cap = None
-        if usl is not None and lsl is not None:
-            cap = self.capability(flat, usl, lsl, limits.sigma_estimate)
+        if usl is not None or lsl is not None:
+            cap = self.capability(flat, usl=usl, lsl=lsl, sigma_within=limits.sigma_estimate)
 
         return SpcAnalysisResult(
             chart_type="xbar_s",
@@ -311,6 +375,7 @@ class SpcAnalyzer:
             capability=cap,
             subgroup_stats=subgroup_df,
             out_of_control_points=ooc,
+            metadata=self._analysis_metadata(),
         )
 
     def analyze_imr(
@@ -333,8 +398,8 @@ class SpcAnalyzer:
         ]
 
         cap = None
-        if usl is not None and lsl is not None:
-            cap = self.capability(x, usl, lsl, limits.sigma_estimate)
+        if usl is not None or lsl is not None:
+            cap = self.capability(x, usl=usl, lsl=lsl, sigma_within=limits.sigma_estimate)
 
         return SpcAnalysisResult(
             chart_type="imr",
@@ -343,4 +408,5 @@ class SpcAnalyzer:
             capability=cap,
             individual_stats=ind_df,
             out_of_control_points=ooc,
+            metadata=self._analysis_metadata(),
         )

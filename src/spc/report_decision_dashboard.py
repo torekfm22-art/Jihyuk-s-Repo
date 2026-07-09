@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
@@ -31,11 +32,16 @@ FILL_BANNER = PatternFill("solid", fgColor="E8EEF4")
 FILL_ALT = PatternFill("solid", fgColor="F5F8FC")
 
 VERDICT_KO = {
-    "process_stability": "공정상태",
-    "normality_verdict": "정규성",
-    "capability_verdict": "공정능력",
+    "process_stability": "① 공정상태",
+    "normality_verdict": "② 정규성",
+    "primary_kpi": "③ Primary KPI",
+    "cp_cpk_validity": "④ Cp/Cpk 유효성",
+    "western_electric_summary": "⑤ 관리도 이상 패턴",
+    "capability_verdict": "공정능력 판정",
+    "process_level": "공정 레벨",
+    "subgroup_rationality": "Subgroup Rationality",
     "control_chart_deploy": "관리도 적용",
-    "priority_action": "우선 조치",
+    "priority_action": "⑥ 권고 조치",
 }
 
 COMMENTARY_KO = {
@@ -61,11 +67,11 @@ COMPLIANCE_KO = {
 
 
 def _style_verdict(text: str) -> tuple[PatternFill, Font]:
-    if text in ("안정", "정규", "충분", "가능"):
+    if any(x in text for x in ("Stable (In Control)", "정규 (Normal)", "충분 (Sufficient)", "가능 (Possible)", "Valid", "Rational")):
         return FILL_OK, FONT_OK
-    if text in ("불안정", "비정규", "부족", "불가", "판정불가"):
+    if any(x in text for x in ("Unstable", "비정규", "부족", "불가", "Invalid", "Non-rational")):
         return FILL_BAD, FONT_BAD
-    if text in ("경계", "조건부", "예외적 가능"):
+    if any(x in text for x in ("경계", "조건부", "예외적", "Borderline", "Conditional")):
         return FILL_WARN, FONT_WARN
     return FILL_NEUTRAL, FONT_NEUTRAL
 
@@ -79,6 +85,17 @@ def _deploy_label(deploy: str) -> str:
     }.get(deploy, deploy)
 
 
+def _resolve_write_cell(ws: Worksheet, row: int, col: int):
+    """병합 영역 내 셀이면 좌상단(쓰기 가능) 셀로 변환."""
+    cell = ws.cell(row, col)
+    if not isinstance(cell, MergedCell):
+        return cell
+    for merged in ws.merged_cells.ranges:
+        if merged.min_row <= row <= merged.max_row and merged.min_col <= col <= merged.max_col:
+            return ws.cell(merged.min_row, merged.min_col)
+    return cell
+
+
 def _set_cell(
     ws: Worksheet,
     row: int,
@@ -90,7 +107,7 @@ def _set_cell(
     align: Alignment | None = None,
     border: Border | None = BORDER,
 ) -> None:
-    cell = ws.cell(row, col)
+    cell = _resolve_write_cell(ws, row, col)
     cell.value = value
     if font:
         cell.font = font
@@ -154,12 +171,12 @@ def add_decision_dashboard_sheet(
     _set_cell(ws, 2, 1, meta_line or "공정능력 연구", font=SMALL_FONT, border=None)
     ws["A2"].alignment = Alignment(horizontal="center")
 
-    # ── KPI 카드 4개 ──
+    # ── KPI 카드 (AIAG-VDA 권고 순서) ──
     cards = [
-        ("공정상태", v.process_stability),
-        ("정규성", v.normality_verdict),
-        ("공정능력", v.capability_verdict),
-        ("관리도 적용", v.control_chart_deploy),
+        ("① 공정상태", v.process_stability),
+        ("② 정규성", v.normality_verdict),
+        ("③ Primary KPI", v.primary_kpi),
+        ("④ Cp/Cpk", v.cp_cpk_validity),
     ]
     for i, (title, val) in enumerate(cards):
         col = 1 + i
@@ -170,13 +187,28 @@ def add_decision_dashboard_sheet(
         ws.cell(5, col).alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[5].height = 36
 
-    # ── 우선 조치 배너 ──
-    ws.merge_cells("A7:F7")
-    _set_cell(ws, 7, 1, f"▶ 우선 조치: {v.priority_action}", font=Font(bold=True, size=11, color="1F4E79"), fill=FILL_BANNER)
-    ws["A7"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    ws.row_dimensions[7].height = 28
+    # ── 보조 KPI 2개 (병합 범위 겹치지 않게 A:C / D:F 분리) ──
+    extra_cards = [
+        ("⑤ WE Rules", v.western_electric_summary[:40] + ("..." if len(v.western_electric_summary) > 40 else "")),
+        ("공정 레벨", v.process_level),
+    ]
+    extra_layout = [(1, 3), (4, 6)]
+    for i, (title, val) in enumerate(extra_cards):
+        c0, c1 = extra_layout[i]
+        fill, font = _style_verdict(val)
+        _merge_set(ws, 6, c0, c1, title, font=Font(bold=True, size=9, color="555555"), fill=FILL_BANNER)
+        _resolve_write_cell(ws, 6, c0).alignment = Alignment(horizontal="center")
+        _merge_set(ws, 7, c0, c1, val, font=Font(bold=True, size=10), fill=fill)
+        _resolve_write_cell(ws, 7, c0).alignment = Alignment(horizontal="center", wrap_text=True)
+    ws.row_dimensions[7].height = 40
 
-    row = 9
+    # ── 우선 조치 배너 ──
+    ws.merge_cells("A9:F9")
+    _set_cell(ws, 9, 1, f"▶ ⑥ 권고 조치: {v.priority_action}", font=Font(bold=True, size=11, color="1F4E79"), fill=FILL_BANNER)
+    ws["A9"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    ws.row_dimensions[9].height = 28
+
+    row = 11
     row = _write_section_header(ws, row, "회사 기준 판정 · 후속조치 체크")
     for key, label in COMPLIANCE_KO.items():
         val = getattr(comp, key, None)
@@ -210,6 +242,24 @@ def add_decision_dashboard_sheet(
         )
         ws.cell(row, 1).alignment = Alignment(wrap_text=True)
         row += 2
+
+    row = _write_section_header(ws, row, "Western Electric Rules 상세")
+    if decision.control_chart.western_electric_violations:
+        _set_cell(ws, row, 1, "Rule ID", font=HEADER_FONT, fill=HEADER_FILL)
+        _set_cell(ws, row, 2, "규칙", font=HEADER_FONT, fill=HEADER_FILL)
+        _set_cell(ws, row, 3, "발생 횟수", font=HEADER_FONT, fill=HEADER_FILL)
+        _merge_set(ws, row, 4, 5, "발생 위치 (subgroup)", font=HEADER_FONT, fill=HEADER_FILL)
+        row += 1
+        for we_v in decision.control_chart.western_electric_violations:
+            loc = ", ".join(str(p) for p in we_v.affected_subgroups)
+            _set_cell(ws, row, 1, we_v.rule_id, font=BODY_FONT)
+            _set_cell(ws, row, 2, we_v.rule_name, font=BODY_FONT)
+            _set_cell(ws, row, 3, we_v.occurrence_count, font=BODY_FONT)
+            _merge_set(ws, row, 4, 5, loc, font=BODY_FONT)
+            row += 1
+    else:
+        _merge_set(ws, row, 1, 5, "Western Electric Rules: 위반 없음", font=BODY_FONT)
+        row += 1
 
     row = _write_section_header(ws, row, "판정 근거 (Decision Log)")
     _set_cell(ws, row, 1, "우선순위", font=HEADER_FONT, fill=HEADER_FILL)
@@ -279,10 +329,10 @@ def write_verdict_strip_on_summary(ws: Worksheet, decision: SpcDecisionResult, s
 
     r = start_row + 1
     cards = [
-        ("공정", v.process_stability),
-        ("정규성", v.normality_verdict),
-        ("공정능력", v.capability_verdict),
-        ("관리도", v.control_chart_deploy),
+        ("① 공정", v.process_stability),
+        ("② 정규성", v.normality_verdict),
+        ("③ KPI", v.primary_kpi),
+        ("④ Cp/Cpk", v.cp_cpk_validity),
     ]
     col_span = 3
     for i, (title, val) in enumerate(cards):

@@ -128,6 +128,46 @@ PATTERN_CATALOG: dict[str, ControlPatternMeta] = {
         ),
         severity="medium",
     ),
+    "we_rule_1": ControlPatternMeta(
+        pattern_id="we_rule_1",
+        pattern_name_ko="WE Rule 1 — 3σ 초과",
+        description="1점이 관리한계(3σ)를 벗어났습니다.",
+        likely_causes=("특별원인", "공정 조건 급변", "측정 오류"),
+        recommended_actions=("이탈 시점 4M1E 확인", "원인 제거 후 재수집"),
+        severity="critical",
+    ),
+    "we_rule_2": ControlPatternMeta(
+        pattern_id="we_rule_2",
+        pattern_name_ko="WE Rule 2 — 2σ 구간 2/3 연속",
+        description="연속 3점 중 2점 이상이 2σ 구간을 벗어났습니다.",
+        likely_causes=("평균 이동 전조", "공정 드리프트"),
+        recommended_actions=("추세 원인 분석", "공정 중심 재조정"),
+        severity="high",
+    ),
+    "we_rule_3": ControlPatternMeta(
+        pattern_id="we_rule_3",
+        pattern_name_ko="WE Rule 3 — 1σ 구간 4/5 연속",
+        description="연속 5점 중 4점 이상이 1σ 구간을 벗어났습니다.",
+        likely_causes=("체계적 편차", "셋업 편차 누적"),
+        recommended_actions=("편차 방향 원인 분석", "예방 조치"),
+        severity="high",
+    ),
+    "we_rule_4": ControlPatternMeta(
+        pattern_id="we_rule_4",
+        pattern_name_ko="WE Rule 4 — 중심선 동일측 연속",
+        description="중심선 기준 동일 방향으로 연속 7점 이상 배치되었습니다.",
+        likely_causes=("평균 이동", "측정 영점 드리프트", "공구 마모"),
+        recommended_actions=("평균 위치 원인 분석", "공정 중심 재조정"),
+        severity="high",
+    ),
+    "we_rule_5": ControlPatternMeta(
+        pattern_id="we_rule_5",
+        pattern_name_ko="WE Rule 5 — 연속 증감 추세",
+        description="연속 7점 이상 단조 증가 또는 감소 추세가 관찰됩니다.",
+        likely_causes=("공구 마모", "환경 변화", "원료 특성 변화"),
+        recommended_actions=("시간·순번 연계 원인 분석", "예방보전 검토"),
+        severity="high",
+    ),
 }
 
 

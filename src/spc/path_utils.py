@@ -13,8 +13,12 @@ def resolve_input_path(file_ref: str | None, input_dir: Path) -> Path | None:
         return None
 
     ref = Path(file_ref.strip())
-    if ref.is_absolute() and ref.exists():
-        return ref.resolve()
+    if ref.is_absolute():
+        if ref.exists():
+            return ref.resolve()
+        candidate = input_dir / ref.name
+        if candidate.exists():
+            return candidate.resolve()
 
     candidate = input_dir / ref.name
     if candidate.exists():
@@ -23,8 +27,10 @@ def resolve_input_path(file_ref: str | None, input_dir: Path) -> Path | None:
     if ref.exists():
         return ref.resolve()
 
-    raise FileNotFoundError(
-        f"파일을 찾을 수 없습니다: {file_ref}\n"
-        f"확인: {candidate}\n"
-        f"※ QMS 미사용 시 QMS 입력란을 비워두세요."
-    )
+    hints = [
+        f"확인: {candidate}",
+        "Streamlit: 「데이터 입력」에서 Excel을 **업로드**한 뒤 분석을 실행하세요.",
+        f"또는 파일을 `{input_dir}` 폴더에 복사하세요.",
+        "※ QMS 미사용 시 QMS 입력란을 비워두세요.",
+    ]
+    raise FileNotFoundError(f"파일을 찾을 수 없습니다: {file_ref}\n" + "\n".join(hints))

@@ -49,13 +49,32 @@ def assess_qq_plot(data: np.ndarray) -> QqPlotAssessment:
         )
 
     sorted_x = np.sort(x)
+    sample_std = float(np.std(x, ddof=1))
+
+    if sample_std < 1e-12:
+        return QqPlotAssessment(
+            supported=False,
+            fit_r2=None,
+            assessment="zero_variance",
+            state_hint="undetermined",
+            message="측정값 산포 없음(모든 값 동일) — QQ plot 판정 불가",
+        )
+
     probs = (np.arange(1, n + 1) - 0.375) / (n + 0.25)
-    theoretical = stats.norm.ppf(probs, loc=np.mean(x), scale=np.std(x, ddof=1))
+    theoretical = stats.norm.ppf(probs, loc=np.mean(x), scale=sample_std)
 
     if np.std(theoretical) < 1e-12:
         r2 = 0.0
     else:
         r = np.corrcoef(theoretical, sorted_x)[0, 1]
+        if not np.isfinite(r):
+            return QqPlotAssessment(
+                supported=False,
+                fit_r2=None,
+                assessment="undetermined",
+                state_hint="undetermined",
+                message="QQ plot 직선성 계산 불가 — 산포·표본수 확인 필요",
+            )
         r2 = float(r * r)
 
     if r2 >= 0.97:
