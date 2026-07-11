@@ -129,6 +129,10 @@ def run_spc_analysis(
     stage: str = "mass_production",
     process_name: str | None = None,
     machine_name: str | None = None,
+    process_number: str | None = None,
+    special_characteristic_symbol: str | None = None,
+    summary_measurement_column: str | None = None,
+    summary_vehicle_column: str | None = None,
     special_characteristic: bool = False,
     process_change_detected: bool = False,
     use_full_population: bool = False,
@@ -143,6 +147,8 @@ def run_spc_analysis(
     measurement_point_column: str | None = None,
     measurement_point_columns: list[str] | None = None,
     measurement_point_values: list[str] | None = None,
+    per_split_spec: bool = False,
+    split_spec_limits: dict[str, tuple[float | None, float | None]] | None = None,
 ) -> StreamlitAnalysisBundle:
     sheet = sheet_name if sheet_name is not None else 0
     config = SpcJobConfig(
@@ -160,6 +166,10 @@ def run_spc_analysis(
         stage=stage,  # type: ignore[arg-type]
         process_name=process_name,
         machine_name=machine_name,
+        process_number=process_number,
+        special_characteristic_symbol=special_characteristic_symbol,
+        summary_measurement_column=summary_measurement_column,
+        summary_vehicle_column=summary_vehicle_column,
         special_characteristic=special_characteristic,
         process_change_detected=process_change_detected,
         use_full_population=use_full_population,
@@ -173,10 +183,13 @@ def run_spc_analysis(
         measurement_point_column=measurement_point_column,
         measurement_point_columns=list(measurement_point_columns or []),
         measurement_point_values=measurement_point_values or [],
+        per_split_spec=per_split_spec,
         save_reports=False,
         sheet_name=sheet,
         value_column=value_column,
     )
+    if split_spec_limits:
+        config.split_spec_limits = dict(split_spec_limits)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -220,6 +233,10 @@ def job_config_from_active(active: SpcPipelineResult) -> SpcJobConfig:
         sampling_method=cfg.get("sampling_method", "consecutive"),  # type: ignore[arg-type]
         process_name=study.get("process") if study.get("process") != "-" else None,
         machine_name=study.get("machine") if study.get("machine") != "-" else None,
+        process_number=study.get("process_number") if study.get("process_number") not in (None, "-") else None,
+        special_characteristic_symbol=study.get("special_symbol") if study.get("special_symbol") not in (None, "-") else None,
+        summary_measurement_column=study.get("summary_measurement_column"),
+        summary_vehicle_column=study.get("summary_vehicle_column"),
         save_reports=False,
         sheet_name=cfg.get("sheet_name", 0),
         value_column=cfg.get("value_column"),

@@ -316,6 +316,9 @@ def recommend_composite_column_pair(options: list[dict]) -> tuple[str, str] | No
 
 
 _COMPOSITE_PAIR_PRIORITY: tuple[tuple[str, str], ...] = (
+    ("characteristic", "item"),
+    ("item", "characteristic"),
+    ("measure_item", "item"),
     ("item", "machine"),
     ("machine", "item"),
     ("characteristic", "machine"),

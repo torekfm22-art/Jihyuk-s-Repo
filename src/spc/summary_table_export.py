@@ -19,6 +19,11 @@ from src.spc.pipeline import SpcPipelineResult
 from src.spc.statistics import SpcAnalysisResult, _cap_round
 
 SUMMARY_COLUMNS = [
+    "라인",
+    "차종",
+    "공정번호",
+    "특별특성",
+    "공정명",
     "측정항목",
     "LSL",
     "USL",
@@ -59,11 +64,15 @@ def iter_leaf_pipeline_results(pipe: SpcPipelineResult) -> list[SpcPipelineResul
     if not pipe.is_batch:
         return [pipe]
     leaves: list[SpcPipelineResult] = []
+    seen: set[str] = set()
     for child in pipe.split_results:
-        if child.is_batch:
-            leaves.extend(child.split_results)
-        else:
-            leaves.append(child)
+        candidates = child.split_results if child.is_batch else [child]
+        for leaf in candidates:
+            key = f"{leaf.characteristic or ''}|{leaf.sample_count or 0}"
+            if key in seen:
+                continue
+            seen.add(key)
+            leaves.append(leaf)
     return leaves
 
 
@@ -296,19 +305,66 @@ def _capability_values(
     return _fmt_cap(pp), _fmt_cap(ppk), _fmt_cap(cp), _fmt_cap(cpk)
 
 
+def _dataframe_column_display_value(
+    df: pd.DataFrame | None,
+    col: str | None,
+) -> str:
+    """분석 대상 부분집합에서 지정 열의 대표값."""
+    if df is None or df.empty or not col or col not in df.columns:
+        return "-"
+    series = df[col].dropna()
+    if series.empty:
+        return "-"
+    uniq = series.astype(str).str.strip().unique()
+    uniq = [u for u in uniq if u and u.lower() not in ("nan", "none", "-")]
+    if not uniq:
+        return "-"
+    if len(uniq) == 1:
+        return uniq[0]
+    if len(uniq) <= 3:
+        return " · ".join(uniq)
+    return f"{uniq[0]} · {uniq[1]} · {uniq[2]} 외 {len(uniq) - 3}"
+
+
+def _summary_meta_fields(
+    result: SpcPipelineResult,
+    *,
+    split_column: str | None = None,
+) -> dict[str, str]:
+    study = result.study_info or {}
+    label = format_split_label(
+        result.characteristic or "-",
+        split_column or result.split_column or "",
+    )
+    measure_col = study.get("summary_measurement_column")
+    vehicle_col = study.get("summary_vehicle_column")
+    return {
+        "라인": str(study.get("machine") or "-"),
+        "차종": _dataframe_column_display_value(result.filtered_df, vehicle_col),
+        "공정번호": str(study.get("process_number") or "-"),
+        "특별특성": str(study.get("special_symbol") or "-"),
+        "공정명": str(study.get("process") or "-"),
+        "측정항목": (
+            _dataframe_column_display_value(result.filtered_df, measure_col)
+            if measure_col
+            else label
+        ),
+    }
+
+
 def build_summary_row(
     result: SpcPipelineResult,
     *,
     split_column: str | None = None,
 ) -> dict[str, Any]:
     """단일 분석 대상 → 요약표 1행."""
-    label = format_split_label(result.characteristic or "-", split_column or result.split_column or "")
+    meta = _summary_meta_fields(result, split_column=split_column)
     analysis = result.analysis
     decision = result.decision
 
     if analysis is None:
         return {
-            "측정항목": label,
+            **meta,
             "LSL": None,
             "USL": None,
             "LCL": None,
@@ -339,7 +395,7 @@ def build_summary_row(
     remarks = build_summary_remarks(analysis, decision, result.sample_df)
 
     return {
-        "측정항목": label,
+        **meta,
         "LSL": lsl,
         "USL": usl,
         "LCL": lcl,
@@ -393,7 +449,8 @@ def write_summary_workbook(
     ws = wb.active
     ws.title = "판정요약"
 
-    ws.merge_cells("A1:M1")
+    last_col = get_column_letter(len(SUMMARY_COLUMNS))
+    ws.merge_cells(f"A1:{last_col}1")
     ws["A1"] = title
     ws["A1"].font = Font(bold=True, size=13, color="1F4E79")
     ws["A1"].alignment = Alignment(horizontal="center")
@@ -407,7 +464,7 @@ def write_summary_workbook(
     ]
     meta = " · ".join(str(p) for p in meta_parts if p)
     if meta:
-        ws.merge_cells("A2:M2")
+        ws.merge_cells(f"A2:{last_col}2")
         ws["A2"] = meta
         ws["A2"].font = Font(size=9, italic=True, color="666666")
         ws["A2"].alignment = Alignment(horizontal="center")
@@ -444,7 +501,7 @@ def write_summary_workbook(
                 cell.number_format = "0.0000"
                 cell.alignment = Alignment(horizontal="right", vertical="center")
 
-    widths = [28, 10, 10, 10, 10, 10, 10, 8, 8, 8, 8, 8, 52]
+    widths = [12, 12, 10, 10, 14, 20, 10, 10, 10, 10, 10, 10, 8, 8, 8, 8, 8, 52]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = "A5"

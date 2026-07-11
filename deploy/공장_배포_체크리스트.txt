@@ -1,0 +1,37 @@
+SPC 공정능력 분석 — 공장 배포 체크리스트
+========================================
+
+[배포 전 — 품질기획팀]
+  □ package_release_build.bat 실행 → release\*.zip 생성 확인
+  □ manifest.txt 의 SHA256 기록 보관
+  □ 단위 테스트 통과 확인 (pytest tests/)
+  □ 샘플 데이터로 EXE 실행·분석·PDF 생성 스모크 테스트
+
+[IT / 공장 PC 배포]
+  □ 대상: Windows 10/11 64bit, Python 불필요
+  □ ZIP을 로컬 디스크에 압축 해제 (C:\ 또는 D:\ 권장)
+  □ 폴더 구조 확인:
+      · SPC_공정능력분석.exe
+      · _internal\ (삭제 금지)
+      · config\spc_policy.yaml (판정 기준, 필요 시 수정)
+      · data\input\ , data\output\
+      · RUN_SPC.bat , DISTRIBUTE.txt , IT_GUIDE.txt
+  □ 백신/Defender 예외 등록 (압축 해제 폴더 전체)
+  □ (선택) CREATE_DESKTOP_SHORTCUT.bat → 바탕화면 바로가기
+
+[현장 사용자 안내]
+  □ MES/QMS Excel 내보내기 → GUI 「+ 파일 추가」
+  □ USL/LSL 입력 후 「분석 실행」
+  □ 결과: data\output\ (Excel + PDF)
+  □ X-Y 매트릭스: Raw data 시트 Excel → 「구조 인식」→ 「분석 실행」
+
+[공장별 설정 (선택)]
+  · config\spc_policy.yaml 수정으로 Cp/Cpk 기준값 변경 가능
+  · 기본값: Cp/Cpk 1.33, Pp/Ppk 1.67, subgroup 25
+
+[업데이트]
+  □ data\output\ 결과 백업
+  □ 기존 폴더 교체 후 새 ZIP 압축 해제
+
+[문의 시]
+  · Windows 버전, 오류 스크린샷, MES 파일 형식(xlsx/암호화)

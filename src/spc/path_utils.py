@@ -34,3 +34,20 @@ def resolve_input_path(file_ref: str | None, input_dir: Path) -> Path | None:
         "※ QMS 미사용 시 QMS 입력란을 비워두세요.",
     ]
     raise FileNotFoundError(f"파일을 찾을 수 없습니다: {file_ref}\n" + "\n".join(hints))
+
+
+def resolve_nested_output_dir(
+    base: Path,
+    *,
+    process_name: str | None = None,
+    machine_name: str | None = None,
+) -> Path:
+    """공장·설비별 하위 output 경로 (예: data/output/충주제어기/설비#1)."""
+    from src.spc.characteristic_split import safe_filename_slug
+
+    out = Path(base)
+    if process_name and str(process_name).strip():
+        out = out / safe_filename_slug(str(process_name).strip())
+    if machine_name and str(machine_name).strip():
+        out = out / safe_filename_slug(str(machine_name).strip())
+    return out

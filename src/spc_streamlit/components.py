@@ -1,6 +1,7 @@
 """Streamlit UI 공통 컴포넌트."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import math
@@ -14,6 +15,136 @@ from src.spc.data_extractor import ExcelColumnPreview, SpecLimitPreview
 from src.spc.decision_models import SpcDecisionResult
 from src.spc.pipeline import SpcPipelineResult
 from src.spc.statistics import SpcAnalysisResult
+
+MIN_SPLIT_ROW_COUNT = 125
+
+
+def _split_pick_cache_key(state_key: str) -> str:
+    return f"{state_key}_cached_selection"
+
+
+def _split_groups_session_key(file_name: str, split_columns: list[str]) -> str:
+    return f"mp_selected_{file_name}_{'_'.join(split_columns)}"
+
+
+def _group_spec_exclude_key(file_name: str, split_columns: list[str]) -> str:
+    return f"group_spec_excluded_norm_{file_name}_{'_'.join(split_columns)}"
+
+
+def _split_groups_original_key(file_name: str, split_columns: list[str]) -> str:
+    return f"mp_selected_original_{file_name}_{'_'.join(split_columns)}"
+
+
+def _load_excluded_norms(exclude_key: str) -> set[str]:
+    raw = st.session_state.get(exclude_key, [])
+    if isinstance(raw, set):
+        raw = list(raw)
+    return {str(x) for x in (raw or []) if str(x).strip()}
+
+
+def _save_excluded_norms(exclude_key: str, norms: set[str]) -> None:
+    st.session_state[exclude_key] = sorted(n for n in norms if n)
+
+
+def _filter_groups_by_excluded(
+    groups: list[str],
+    excluded_norms: set[str],
+    *,
+    normalize,
+) -> list[str]:
+    return [
+        str(g) for g in groups
+        if str(g).strip() and normalize(g) not in excluded_norms
+    ]
+
+
+def _split_picker_state_keys(file_name: str, split_columns: list[str]) -> list[str]:
+    keys = [
+        f"mp_comp_pick_{file_name}_{'_'.join(split_columns)}",
+        f"mp_auto_comp_pick_{file_name}_{'_'.join(split_columns)}",
+    ]
+    if len(split_columns) == 1:
+        col = split_columns[0]
+        keys.extend([
+            f"mp_manual_pick_{file_name}_{col}",
+            f"mp_auto_pick_{file_name}_{col}",
+        ])
+    return keys
+
+
+def _sync_analysis_groups_after_spec_delete(
+    *,
+    file_name: str,
+    sheet: str,
+    split_columns: list[str],
+    split_col: str,
+    remaining: list[str],
+    excluded_norms: set[str],
+) -> None:
+    """규격 확인 삭제 → 분석 대상·데이터 분리 표·캐시 동기화."""
+    from src.spc.characteristic_split import normalize_split_value
+
+    split_sel_key = _split_groups_session_key(file_name, split_columns)
+    exclude_key = _group_spec_exclude_key(file_name, split_columns)
+    editor_key = f"group_spec_pick_{file_name}_{'_'.join(split_columns)}"
+    scope_key = f"group_spec_rows_{file_name}_{sheet}_{split_col}_sel"
+    rem_norm = {normalize_split_value(g) for g in remaining}
+
+    st.session_state[split_sel_key] = list(remaining)
+    _save_excluded_norms(exclude_key, excluded_norms)
+    st.session_state.pop(editor_key, None)
+    st.session_state[f"{scope_key}_targets"] = tuple(remaining)
+
+    if scope_key in st.session_state:
+        st.session_state[scope_key] = [
+            r for r in st.session_state[scope_key]
+            if normalize_split_value(r["그룹"]) in rem_norm
+        ]
+
+    for key in _split_picker_state_keys(file_name, split_columns):
+        st.session_state[_split_pick_cache_key(key)] = list(remaining)
+        stored = st.session_state.get(key)
+        if not isinstance(stored, pd.DataFrame) or "항목명" not in stored.columns:
+            continue
+        kept = stored[
+            stored["항목명"].apply(lambda g: normalize_split_value(str(g)) in rem_norm)
+        ].copy()
+        if "선택" in kept.columns:
+            kept["선택"] = True
+        st.session_state[key] = kept.reset_index(drop=True)
+
+
+def _merge_group_lists(*group_lists: list[str]) -> list[str]:
+    from src.spc.characteristic_split import normalize_split_value
+
+    seen: set[str] = set()
+    merged: list[str] = []
+    for groups in group_lists:
+        for g in groups:
+            norm = normalize_split_value(g)
+            if not norm or norm in seen:
+                continue
+            seen.add(norm)
+            merged.append(str(g))
+    return merged
+
+
+def _persist_split_selection(
+    state_key: str,
+    selected: list[str],
+    *,
+    authoritative: list[str] | None = None,
+) -> list[str]:
+    """데이터 분리 선택 — 규격 확인 제외 후 목록 우선."""
+    if authoritative:
+        return list(authoritative)
+    cache_key = _split_pick_cache_key(state_key)
+    cleaned = [str(v) for v in selected if str(v).strip()]
+    if cleaned:
+        st.session_state[cache_key] = cleaned
+        return cleaned
+    cached = [str(v) for v in (st.session_state.get(cache_key) or []) if str(v).strip()]
+    return cached
 
 
 def _save_bytes_to_output(output_dir: Path, filename: str, data: bytes) -> Path:
@@ -1186,10 +1317,12 @@ def render_spec_limit_picker(
     preview: ExcelColumnPreview | None,
     *,
     file_key: str = "default",
-) -> tuple[str, float | None, float | None]:
+    batch_split: bool = False,
+    split_groups: list[str] | None = None,
+) -> tuple[str, float | None, float | None, bool, dict[str, tuple[float | None, float | None]]]:
     """
     규격(공차) 자동 감지·입력 UI.
-    Returns: (spec_mode_label, lsl, usl)
+    Returns: (spec_mode_label, lsl, usl, per_split_spec, split_spec_limits)
     """
     _MODE_MAP = {
         "both": "양측 공차",
@@ -1197,11 +1330,41 @@ def render_spec_limit_picker(
         "lower_only": "편측 — 하한치",
     }
     _MODE_CHOICES = list(_MODE_MAP.values())
+    empty_specs: dict[str, tuple[float | None, float | None]] = {}
 
     st.markdown("**📏 규격(LSL / USL)**")
     sp: SpecLimitPreview | None = preview.spec_limit if preview and preview.spec_limit else None
     detected = bool(sp and sp.detected)
     has_partial = bool(sp and (sp.lsl is not None or sp.usl is not None))
+    groups = [g for g in (split_groups or []) if str(g).strip()]
+
+    if batch_split:
+        st.caption(
+            "데이터 분리(검사명·차종 등)로 **여러 그룹**을 분석할 때 "
+            "규격을 **자동 선정**(Excel 상·하한) 또는 **직접 입력**할 수 있습니다."
+        )
+        scope = st.radio(
+            "규격 적용 범위",
+            ["자동 선정", "직접 입력"],
+            horizontal=True,
+            key=f"spec_scope_{file_key}",
+            help="자동 선정: Excel 상·하한 열. 직접 입력: 선택한 그룹마다 LSL/USL 입력.",
+        )
+        if scope == "자동 선정":
+            default_mode = _MODE_MAP.get(sp.suggested_spec_mode, "양측 공차") if sp else "양측 공차"
+            st.success(
+                "각 분리 그룹의 **상한값·하한값** 열에서 규격을 읽습니다. "
+                "아래 표에서 **이상 규격을 수정하거나 제외**하세요."
+            )
+            return default_mode, None, None, True, empty_specs
+
+        if not groups:
+            st.warning("먼저 **데이터 분리**에서 분석할 항목(그룹)을 1개 이상 선택하세요.")
+        else:
+            spec_mode, split_specs = _render_batch_manual_spec_table(
+                groups, file_key=file_key, sp=sp,
+            )
+            return spec_mode, None, None, False, split_specs
 
     if preview is None or preview.error:
         st.caption("Excel을 업로드하면 **상한값·하한값** 열에서 LSL/USL을 자동 추천합니다.")
@@ -1247,7 +1410,7 @@ def render_spec_limit_picker(
             st.metric("USL (상한)", f"{sp.usl:g}")
         else:
             st.metric("LSL (하한)", f"{sp.lsl:g}")
-        return spec_label, sp.lsl, sp.usl
+        return spec_label, sp.lsl, sp.usl, False, empty_specs
 
     if has_partial and sp:
         hints: list[str] = []
@@ -1316,7 +1479,452 @@ def render_spec_limit_picker(
         lsl = _parse(lsl_raw)
         usl = None
 
-    return spec_mode, lsl, usl
+    return spec_mode, lsl, usl, False, empty_specs
+
+
+def _render_batch_manual_spec_table(
+    groups: list[str],
+    *,
+    file_key: str,
+    sp: SpecLimitPreview | None,
+) -> tuple[str, dict[str, tuple[float | None, float | None]]]:
+    """다중 그룹 — 항목별 LSL/USL 직접 입력."""
+    _MODE_CHOICES = ["양측 공차", "편측 — 상한치", "편측 — 하한치"]
+    default_label = "양측 공차"
+    if sp and sp.suggested_spec_mode == "upper_only":
+        default_label = "편측 — 상한치"
+    elif sp and sp.suggested_spec_mode == "lower_only":
+        default_label = "편측 — 하한치"
+
+    spec_mode = st.radio(
+        "공차 유형 (선택 그룹 공통)",
+        _MODE_CHOICES,
+        index=_MODE_CHOICES.index(default_label) if default_label in _MODE_CHOICES else 0,
+        horizontal=True,
+        key=f"spec_type_batch_{file_key}",
+    )
+
+    hint_lsl = float(sp.lsl) if sp and sp.lsl is not None else None
+    hint_usl = float(sp.usl) if sp and sp.usl is not None else None
+    if hint_lsl is not None or hint_usl is not None:
+        parts: list[str] = []
+        if hint_lsl is not None:
+            parts.append(f"LSL `{hint_lsl:g}`")
+        if hint_usl is not None:
+            parts.append(f"USL `{hint_usl:g}`")
+        st.caption("파일 감지값 참고: " + " · ".join(parts))
+
+    show_lsl = spec_mode == "양측 공차" or spec_mode == "편측 — 하한치"
+    show_usl = spec_mode == "양측 공차" or spec_mode == "편측 — 상한치"
+
+    rows: list[dict] = []
+    for g in groups:
+        row: dict = {"그룹": g}
+        if show_lsl:
+            row["LSL"] = None
+        if show_usl:
+            row["USL"] = None
+        rows.append(row)
+
+    st.caption(f"선택한 **{len(groups)}**개 그룹마다 규격을 입력하세요.")
+    col_config: dict = {
+        "그룹": st.column_config.TextColumn("그룹", disabled=True),
+    }
+    if show_lsl:
+        col_config["LSL"] = st.column_config.NumberColumn("LSL", format="%.4f")
+    if show_usl:
+        col_config["USL"] = st.column_config.NumberColumn("USL", format="%.4f")
+
+    table_height = min(560, max(180, 38 + len(rows) * 35))
+    edited = st.data_editor(
+        pd.DataFrame(rows),
+        column_config=col_config,
+        hide_index=True,
+        use_container_width=True,
+        height=table_height,
+        key=f"batch_spec_manual_{file_key}_{len(groups)}",
+    )
+
+    def _cell_float(val: object) -> float | None:
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return None
+
+    split_specs: dict[str, tuple[float | None, float | None]] = {}
+    incomplete: list[str] = []
+    invalid: list[str] = []
+    for _, row in edited.iterrows():
+        group = str(row["그룹"])
+        lsl = _cell_float(row["LSL"]) if show_lsl else None
+        usl = _cell_float(row["USL"]) if show_usl else None
+        split_specs[group] = (lsl, usl)
+        if lsl is None and usl is None:
+            incomplete.append(group)
+        elif spec_mode == "양측 공차" and lsl is not None and usl is not None and lsl >= usl:
+            invalid.append(group)
+
+    if incomplete:
+        st.warning(
+            f"규격 미입력 그룹 **{len(incomplete)}개** — "
+            + " · ".join(f"`{g}`" for g in incomplete[:6])
+            + (" …" if len(incomplete) > 6 else "")
+        )
+    if invalid:
+        st.error(
+            "양측 공차: LSL은 USL보다 작아야 합니다 — "
+            + " · ".join(f"`{g}`" for g in invalid[:6])
+        )
+
+    return spec_mode, split_specs
+
+
+def _parse_spec_cell(val: object) -> float | None:
+    if val is None:
+        return None
+    try:
+        if isinstance(val, float) and pd.isna(val):
+            return None
+    except (TypeError, ValueError):
+        pass
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_row_selected(val: object) -> bool:
+    if val is None:
+        return False
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        try:
+            if pd.isna(val):
+                return False
+        except (TypeError, ValueError):
+            pass
+        return bool(val)
+    s = str(val).strip().lower()
+    return s in ("true", "1", "yes")
+
+
+def _build_group_spec_pick_df(spec_rows: list[dict], recommended: set[str]) -> pd.DataFrame:
+    from src.spc.spec_limits import assess_spec_values_quality
+
+    rows: list[dict] = []
+    for r in spec_rows:
+        lsl = r.get("LSL")
+        usl = r.get("USL")
+        warn = bool(r.get("warn"))
+        status = str(r.get("상태") or ("OK" if not warn else "⚠ 확인"))
+        issues = list(r.get("issues") or [])
+        if not warn:
+            warn, status, issues = assess_spec_values_quality(lsl, usl)
+        rows.append({
+            "선택": False,
+            "추천": "●" if r["그룹"] in recommended else "",
+            "그룹": r["그룹"],
+            "LSL": lsl,
+            "USL": usl,
+            "행수": r.get("행수"),
+            "상태": status,
+            "비고": " · ".join(issues) if issues else "",
+            "_warn": warn,
+        })
+    return pd.DataFrame(rows)
+
+
+def _style_spec_pick_df(
+    df: pd.DataFrame,
+    *,
+    hide_cols: frozenset[str] | None = None,
+):
+    """연한 분홍 — 규격 확인 필요 행."""
+    from src.spc.spec_limits import SPEC_WARN_FILL
+
+    warn_flags = df["_warn"].tolist() if "_warn" in df.columns else [False] * len(df)
+    display_cols = [c for c in df.columns if not c.startswith("_")]
+    if hide_cols:
+        display_cols = [c for c in display_cols if c not in hide_cols]
+
+    def _row_style(row: pd.Series) -> list[str]:
+        idx = row.name
+        fill = SPEC_WARN_FILL if warn_flags[idx] else ""
+        return [f"background-color: {fill}" if fill else ""] * len(row)
+
+    styled = df[display_cols].style.apply(_row_style, axis=1)
+    return styled
+
+
+def render_group_spec_selector(
+    preview_path: Path,
+    preview: ExcelColumnPreview,
+    split_columns: list[str],
+    *,
+    suggested_values: list[str] | None = None,
+) -> tuple[list[str], dict[str, tuple[float | None, float | None]]]:
+    """분리 그룹별 규격 미리보기 + LSL/USL 편집 + 이상 행 제외."""
+    if len(split_columns) < 1:
+        return list(suggested_values or []), {}
+
+    from src.spc.characteristic_split import (
+        COMPOSITE_SPLIT_COLUMN,
+        apply_composite_split_column,
+        normalize_split_value,
+    )
+    from src.spc.spec_limits import assess_spec_values_quality, preview_group_spec_limits
+
+    try:
+        norm_df = load_normalized_preview_df(preview_path, preview)
+    except Exception as exc:
+        st.warning(f"그룹별 규격 목록을 불러오지 못했습니다: {exc}")
+        return list(suggested_values or []), {}
+
+    if len(split_columns) >= 2:
+        work = apply_composite_split_column(norm_df, split_columns)
+        split_col = COMPOSITE_SPLIT_COLUMN
+    else:
+        work = norm_df
+        split_col = split_columns[0]
+        if split_col not in work.columns:
+            return list(suggested_values or []), {}
+
+    # 데이터 분리에서 선택한 그룹만 표시 (규격 확인에서 삭제한 항목 제외)
+    split_sel_key = _split_groups_session_key(preview.file_name, split_columns)
+    original_key = _split_groups_original_key(preview.file_name, split_columns)
+    exclude_key = _group_spec_exclude_key(preview.file_name, split_columns)
+    excluded_norms = _load_excluded_norms(exclude_key)
+
+    base_values = [g for g in (suggested_values or []) if str(g).strip()]
+    if base_values and original_key not in st.session_state:
+        st.session_state[original_key] = list(base_values)
+    original_values = [
+        str(v) for v in (st.session_state.get(original_key) or base_values) if str(v).strip()
+    ]
+    if base_values and not original_values:
+        original_values = list(base_values)
+        st.session_state[original_key] = list(base_values)
+
+    target_values = _filter_groups_by_excluded(
+        original_values, excluded_norms, normalize=normalize_split_value,
+    )
+    if not target_values and split_sel_key in st.session_state:
+        target_values = _filter_groups_by_excluded(
+            list(st.session_state[split_sel_key]),
+            excluded_norms,
+            normalize=normalize_split_value,
+        )
+
+    if not target_values:
+        st.warning("먼저 **데이터 분리**에서 분석할 항목을 1개 이상 선택하세요.")
+        return [], {}
+    st.session_state[split_sel_key] = list(target_values)
+    if len(target_values) == 1:
+        st.session_state[split_sel_key] = list(target_values)
+        return target_values, {}
+
+    scope_key = (
+        f"group_spec_rows_{preview.file_name}_{preview.sheet}_{split_col}_sel"
+    )
+    if (
+        scope_key not in st.session_state
+        or st.session_state.get(f"{scope_key}_targets") != tuple(target_values)
+    ):
+        st.session_state[scope_key] = preview_group_spec_limits(
+            work, split_col, target_values, max_rows=len(target_values),
+        )
+        st.session_state[f"{scope_key}_targets"] = tuple(target_values)
+    spec_rows = st.session_state[scope_key]
+    editor_key = f"group_spec_pick_{preview.file_name}_{'_'.join(split_columns)}"
+    if not spec_rows:
+        st.warning("그룹별 규격을 읽지 못했습니다. Excel에 상한값·하한값 열이 있는지 확인하세요.")
+        return [], {}
+
+    spec_rows = [
+        r for r in spec_rows
+        if normalize_split_value(r["그룹"]) not in excluded_norms
+    ]
+    if not spec_rows:
+        st.warning("표에서 제외된 그룹만 남았습니다. **전체 복구**로 되돌리세요.")
+        _, restore_col = st.columns([5, 1])
+        with restore_col:
+            if st.button("전체 복구", key=f"{exclude_key}_restore_empty"):
+                _save_excluded_norms(exclude_key, set())
+                _sync_analysis_groups_after_spec_delete(
+                    file_name=preview.file_name,
+                    sheet=preview.sheet,
+                    split_columns=split_columns,
+                    split_col=split_col,
+                    remaining=list(original_values),
+                    excluded_norms=set(),
+                )
+                st.rerun()
+        return [], {}
+
+    suggested_set = set(suggested_values or [])
+    has_spec = {
+        r["그룹"]
+        for r in spec_rows
+        if r.get("LSL") is not None or r.get("USL") is not None
+    }
+    recommended = suggested_set & has_spec if suggested_set else has_spec
+
+    pick_df = _build_group_spec_pick_df(spec_rows, recommended)
+    orig_warn_by_group = dict(zip(pick_df["그룹"].astype(str), pick_df["_warn"]))
+
+    st.markdown("**그룹별 규격 확인**")
+    st.caption(
+        f"데이터 분리에서 선택한 **{len(target_values)}개** 그룹의 LSL/USL을 확인합니다. "
+        "**연한 분홍** = 이상 규격(미감지·텍스트·값 혼재·LSL≥USL 등) — "
+        "LSL/USL을 수정하거나 **선택 → 삭제**로 제외하세요."
+    )
+    if excluded_norms:
+        st.caption(f"표에서 제외된 그룹 **{len(excluded_norms)}**개")
+
+    edit_df = pick_df.drop(columns=["_warn"], errors="ignore")
+    edit_df["선택"] = False
+    if editor_key in st.session_state:
+        stored = st.session_state[editor_key]
+        if isinstance(stored, pd.DataFrame) and "그룹" in stored.columns:
+            merged = edit_df.set_index("그룹")
+            stored_idx = stored.set_index("그룹")
+            stored_idx = stored_idx.loc[stored_idx.index.isin(merged.index)]
+            for col in ("LSL", "USL"):
+                if col in stored_idx.columns:
+                    merged[col] = stored_idx[col]
+            edit_df = merged.reset_index()
+    edit_df["선택"] = edit_df["선택"].fillna(False).astype(bool)
+
+    warn_flags: list[bool] = []
+    status_by_group = dict(zip(pick_df["그룹"].astype(str), pick_df["상태"]))
+    note_by_group = dict(zip(pick_df["그룹"].astype(str), pick_df["비고"]))
+    for idx, row in edit_df.iterrows():
+        group = str(row["그룹"])
+        lsl = _parse_spec_cell(row.get("LSL"))
+        usl = _parse_spec_cell(row.get("USL"))
+        orig_warn = bool(orig_warn_by_group.get(group, False))
+        warn, status, issues = assess_spec_values_quality(lsl, usl)
+        combined = orig_warn or warn
+        warn_flags.append(combined)
+        if orig_warn and not warn:
+            edit_df.at[idx, "상태"] = status_by_group.get(group, status)
+            edit_df.at[idx, "비고"] = note_by_group.get(group, "")
+        else:
+            edit_df.at[idx, "상태"] = status
+            edit_df.at[idx, "비고"] = " · ".join(issues) if issues else ""
+    edit_df["_warn"] = warn_flags
+
+    table_height = min(560, max(200, 38 + len(edit_df) * 35))
+    st.caption("**연한 분홍** 행 = 규격 확인 필요 · **선택** 체크 후 아래 **삭제**")
+
+    edited = st.data_editor(
+        _style_spec_pick_df(edit_df),
+        column_config={
+            "선택": st.column_config.CheckboxColumn("선택", default=False, help="삭제할 행"),
+            "추천": st.column_config.TextColumn("추천", disabled=True, width="small"),
+            "그룹": st.column_config.TextColumn("그룹", disabled=True),
+            "LSL": st.column_config.NumberColumn("LSL", format="%.4f"),
+            "USL": st.column_config.NumberColumn("USL", format="%.4f"),
+            "행수": st.column_config.NumberColumn("행수", disabled=True),
+            "상태": st.column_config.TextColumn("상태", disabled=True, width="small"),
+            "비고": st.column_config.TextColumn("비고", disabled=True, width="medium"),
+        },
+        disabled=["추천", "그룹", "행수", "상태", "비고"],
+        hide_index=True,
+        use_container_width=True,
+        height=table_height,
+        key=editor_key,
+    )
+
+    btn_l, btn_r = st.columns([5, 1])
+    with btn_r:
+        delete_clicked = st.button(
+            "삭제",
+            key=f"{editor_key}_delete",
+            help="선택 열에 체크한 행을 표에서 제거합니다.",
+            type="primary",
+        )
+    with btn_l:
+        if excluded_norms and st.button("전체 복구", key=f"{exclude_key}_restore"):
+            _save_excluded_norms(exclude_key, set())
+            _sync_analysis_groups_after_spec_delete(
+                file_name=preview.file_name,
+                sheet=preview.sheet,
+                split_columns=split_columns,
+                split_col=split_col,
+                remaining=list(original_values),
+                excluded_norms=set(),
+            )
+            st.rerun()
+
+    if delete_clicked:
+        source = edited
+        if editor_key in st.session_state and isinstance(st.session_state[editor_key], pd.DataFrame):
+            source = st.session_state[editor_key]
+        remove_norms = {
+            normalize_split_value(str(row["그룹"]))
+            for _, row in source.iterrows()
+            if _is_row_selected(row.get("선택"))
+        }
+        if remove_norms:
+            new_excluded = set(excluded_norms) | remove_norms
+            remaining = [
+                str(row["그룹"])
+                for _, row in source.iterrows()
+                if normalize_split_value(str(row["그룹"])) not in new_excluded
+            ]
+            _sync_analysis_groups_after_spec_delete(
+                file_name=preview.file_name,
+                sheet=preview.sheet,
+                split_columns=split_columns,
+                split_col=split_col,
+                remaining=remaining,
+                excluded_norms=new_excluded,
+            )
+            st.rerun()
+        else:
+            st.warning("삭제할 행의 **선택**란을 체크하세요.")
+
+    remaining: list[str] = []
+    split_specs: dict[str, tuple[float | None, float | None]] = {}
+    still_warn = 0
+    for _, row in edited.iterrows():
+        group = str(row["그룹"])
+        remaining.append(group)
+        lsl = _parse_spec_cell(row.get("LSL"))
+        usl = _parse_spec_cell(row.get("USL"))
+        split_specs[group] = (lsl, usl)
+        warn, _, _ = assess_spec_values_quality(lsl, usl)
+        if bool(orig_warn_by_group.get(group, False)) or warn:
+            still_warn += 1
+
+    if not remaining:
+        st.warning("표에 남은 그룹이 없습니다. **전체 복구**로 되돌리거나 데이터 분리를 다시 확인하세요.")
+    elif still_warn:
+        st.warning(
+            f"**{still_warn}개** 그룹 — 규격 미입력 또는 확인 필요. "
+            "LSL/USL을 수정하거나 **선택 → 삭제**로 제외하세요."
+        )
+    if remaining:
+        st.session_state[split_sel_key] = list(remaining)
+    else:
+        st.session_state.pop(split_sel_key, None)
+    return remaining, split_specs
+
+
+def render_group_spec_preview(
+    preview_path: Path,
+    preview: ExcelColumnPreview,
+    split_columns: list[str],
+    split_values: list[str],
+) -> None:
+    """(구버전 호환) 그룹별 규격 미리보기만 표시."""
+    render_group_spec_selector(
+        preview_path, preview, split_columns, suggested_values=split_values,
+    )
 
 
 def render_value_column_picker(preview: ExcelColumnPreview) -> str | None:
@@ -1421,6 +2029,37 @@ def render_value_column_picker(preview: ExcelColumnPreview) -> str | None:
     return choice or None
 
 
+def load_normalized_preview_df(preview_path: Path, preview: ExcelColumnPreview) -> pd.DataFrame:
+    """업로드 Excel — 정규화 DataFrame (세션 캐시, UI 단계 공용)."""
+    norm_df, _ = load_preview_workbook(preview_path, preview)
+    return norm_df
+
+
+def load_preview_workbook(
+    preview_path: Path,
+    preview: ExcelColumnPreview,
+) -> tuple[pd.DataFrame, dict[str, str]]:
+    """정규화 DataFrame + 원본 컬럼 표시명 (1회 Excel 읽기, 세션 캐시)."""
+    try:
+        stat = preview_path.stat()
+        stamp = f"{stat.st_size}_{int(stat.st_mtime)}"
+    except OSError:
+        stamp = "0"
+    cache_key = f"workbook_{preview.file_name}_{preview.sheet}_{stamp}"
+    if cache_key in st.session_state:
+        cached = st.session_state[cache_key]
+        return cached["norm_df"], cached["col_display"]
+
+    from src.spc.data_extractor import _column_rename_map, _normalize_columns
+    from src.spc.excel_reader import read_excel_auto
+
+    df = read_excel_auto(preview_path, preview.sheet)
+    norm_df = _normalize_columns(df.copy())
+    col_display = {v: k for k, v in _column_rename_map(df).items()}
+    st.session_state[cache_key] = {"norm_df": norm_df, "col_display": col_display}
+    return norm_df, col_display
+
+
 def load_manual_split_options(
     preview_path: Path,
     preview: ExcelColumnPreview,
@@ -1431,12 +2070,8 @@ def load_manual_split_options(
         return list(st.session_state[cache_key])
 
     from src.spc.characteristic_split import build_manual_split_options
-    from src.spc.data_extractor import _column_rename_map, _normalize_columns
-    from src.spc.excel_reader import read_excel_auto
 
-    df = read_excel_auto(preview_path, preview.sheet)
-    norm_df = _normalize_columns(df.copy())
-    col_display = {v: k for k, v in _column_rename_map(df).items()}
+    norm_df, col_display = load_preview_workbook(preview_path, preview)
     options = build_manual_split_options(norm_df, column_display_names=col_display)
     st.session_state[cache_key] = options
     return options
@@ -1454,12 +2089,8 @@ def load_composite_summary(
         return list(st.session_state[cache_key])
 
     from src.spc.characteristic_split import summarize_composite_split
-    from src.spc.data_extractor import _column_rename_map, _normalize_columns
-    from src.spc.excel_reader import read_excel_auto
 
-    df = read_excel_auto(preview_path, preview.sheet)
-    norm_df = _normalize_columns(df.copy())
-    col_display = {v: k for k, v in _column_rename_map(df).items()}
+    norm_df, col_display = load_preview_workbook(preview_path, preview)
     summary = summarize_composite_split(
         norm_df, cols, display_names=col_display,
     )
@@ -1478,12 +2109,63 @@ def _parse_composite_dim_count(dim_mode: str) -> int:
     return 1
 
 
+def _build_split_pick_df(
+    summary: list[dict],
+    *,
+    recommended: set[str] | None = None,
+    select_if: Callable[[dict], bool] | None = None,
+) -> pd.DataFrame:
+    rec = recommended or set()
+    rows: list[dict] = []
+    for s in summary:
+        pid = str(s["point_id"])
+        row_count = int(s.get("row_count") or 0)
+        checked = bool(select_if(s)) if select_if else False
+        row: dict = {
+            "선택": checked,
+            "항목명": pid,
+            "행 수": row_count,
+            "시작": s.get("period_start") or "—",
+            "종료": s.get("period_end") or "—",
+        }
+        if rec:
+            row["추천"] = "●" if pid in rec else ""
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _apply_split_min_row_select(
+    summary: list[dict],
+    *,
+    min_rows: int = MIN_SPLIT_ROW_COUNT,
+    recommended: set[str] | None = None,
+) -> pd.DataFrame:
+    """행 수 기준 자동 선택용 DataFrame (위젯 key에 직접 대입하지 않음)."""
+    return _build_split_pick_df(
+        summary,
+        recommended=recommended,
+        select_if=lambda s: int(s.get("row_count") or 0) >= min_rows,
+    )
+
+
+def _resolve_authoritative_selection(state_key: str) -> list[str] | None:
+    for prefix in ("mp_comp_pick_", "mp_auto_comp_pick_", "mp_manual_pick_", "mp_auto_pick_"):
+        if state_key.startswith(prefix):
+            sel_key = "mp_selected_" + state_key[len(prefix):]
+            cached = st.session_state.get(sel_key)
+            if cached:
+                return [str(v) for v in cached if str(v).strip()]
+    return None
+
+
 def _pick_split_table(
     preview: ExcelColumnPreview,
     summary: list[dict],
     *,
     caption: str,
     state_key: str,
+    recommended: set[str] | None = None,
+    authoritative: list[str] | None = None,
 ) -> list[str]:
     if len(summary) < 2:
         if summary:
@@ -1491,27 +2173,60 @@ def _pick_split_table(
             return [str(summary[0]["point_id"])]
         return []
 
-    pick_df = pd.DataFrame([
-        {
-            "선택": False,
-            "항목명": str(s["point_id"]),
-            "행 수": s["row_count"],
-            "시작": s.get("period_start") or "—",
-            "종료": s.get("period_end") or "—",
-        }
-        for s in summary
-    ])
+    rec = recommended or set()
+    eligible = sum(1 for s in summary if int(s.get("row_count") or 0) >= MIN_SPLIT_ROW_COUNT)
     st.caption(caption)
+    if rec:
+        rec_list = [pid for pid in (s["point_id"] for s in summary) if str(pid) in rec]
+        if rec_list:
+            st.info(
+                f"**추천 {len(rec_list)}개** (자동 선정 기준 — 체크는 직접 선택): "
+                + " · ".join(f"`{v}`" for v in rec_list[:12])
+                + (" …" if len(rec_list) > 12 else "")
+            )
+
+    btn_col, hint_col = st.columns([1, 2])
+    pending_key = f"{state_key}_pending_min_rows"
+    with btn_col:
+        if st.button(
+            f"행 {MIN_SPLIT_ROW_COUNT}개 이상 자동 선택",
+            key=f"{state_key}_auto_min_rows",
+            help=f"행 수가 {MIN_SPLIT_ROW_COUNT}개 미만인 항목은 제외하고 나머지를 일괄 체크합니다.",
+        ):
+            st.session_state[pending_key] = MIN_SPLIT_ROW_COUNT
+            st.session_state.pop(state_key, None)
+            st.rerun()
+
+    pick_df = _build_split_pick_df(summary, recommended=rec or None)
+    pending_min = st.session_state.pop(pending_key, None)
+    if pending_min is not None:
+        pick_df = _apply_split_min_row_select(
+            summary, min_rows=int(pending_min), recommended=rec or None,
+        )
+
+    with hint_col:
+        if pending_min is not None:
+            n_sel = int(pick_df["선택"].sum())
+            st.success(f"행 {MIN_SPLIT_ROW_COUNT}개 이상 **{n_sel}개** 항목을 선택했습니다.")
+        elif eligible < len(summary):
+            st.caption(
+                f"행 {MIN_SPLIT_ROW_COUNT}개 이상 **{eligible}**개 / 전체 **{len(summary)}**개 "
+                f"(미만 {len(summary) - eligible}개는 자동 선택 시 제외)"
+            )
+
+    col_config: dict = {
+        "선택": st.column_config.CheckboxColumn("선택"),
+        "항목명": st.column_config.TextColumn("항목명", disabled=True),
+        "행 수": st.column_config.NumberColumn("행 수", disabled=True),
+        "시작": st.column_config.TextColumn("시작", disabled=True),
+        "종료": st.column_config.TextColumn("종료", disabled=True),
+    }
+    if rec:
+        col_config["추천"] = st.column_config.TextColumn("추천", disabled=True, width="small")
     table_height = min(560, max(180, 38 + len(pick_df) * 35))
     edited = st.data_editor(
         pick_df,
-        column_config={
-            "선택": st.column_config.CheckboxColumn("선택"),
-            "항목명": st.column_config.TextColumn("항목명", disabled=True),
-            "행 수": st.column_config.NumberColumn("행 수", disabled=True),
-            "시작": st.column_config.TextColumn("시작", disabled=True),
-            "종료": st.column_config.TextColumn("종료", disabled=True),
-        },
+        column_config=col_config,
         hide_index=True,
         use_container_width=True,
         height=table_height,
@@ -1520,8 +2235,13 @@ def _pick_split_table(
     selected = [
         str(row["항목명"])
         for _, row in edited.iterrows()
-        if bool(row.get("선택"))
+        if _is_row_selected(row.get("선택"))
     ]
+    selected = _persist_split_selection(
+        state_key,
+        selected,
+        authoritative=authoritative or _resolve_authoritative_selection(state_key),
+    )
     if not selected:
         st.warning("1개 이상의 항목을 선택하세요.")
     return selected
@@ -1690,8 +2410,6 @@ def _render_auto_composite_picker(
         recommend_composite_columns,
         select_auto_measurement_point_values,
     )
-    from src.spc.data_extractor import _normalize_columns
-    from src.spc.excel_reader import read_excel_auto
 
     n_columns = max(2, min(n_columns, MAX_COMPOSITE_COLUMNS))
     rec = recommend_composite_columns(manual_options, n_columns=n_columns)
@@ -1704,25 +2422,34 @@ def _render_auto_composite_picker(
     labels = [display.get(c, c) for c in split_cols]
     label_join = " × ".join(labels)
 
-    df = read_excel_auto(preview_path, preview.sheet)
-    norm_df = _normalize_columns(df.copy())
-    work = apply_composite_split_column(norm_df, split_cols)
-    auto_vals = select_auto_measurement_point_values(work, COMPOSITE_SPLIT_COLUMN)
     summary = load_composite_summary(preview_path, preview, split_cols)
     all_ids = [str(s["point_id"]) for s in summary]
 
+    norm_df = load_normalized_preview_df(preview_path, preview)
+    work = apply_composite_split_column(norm_df, split_cols)
+    auto_vals = select_auto_measurement_point_values(work, COMPOSITE_SPLIT_COLUMN)
+    recommended = set(auto_vals)
+
     st.info(
-        f"**자동 ({label_join} 복합)** — "
-        f"데이터량 기준 **{len(auto_vals)}개** 선정 (전체 {len(all_ids)}개 조합)\n\n"
-        + "\n".join(f"- {v}" for v in auto_vals)
+        f"**자동 추천 ({label_join})** — "
+        f"구분 열 **{n_columns}개** 자동 선정 · 전체 **{len(all_ids)}**개 조합"
     )
+    if len(all_ids) < 2:
+        return "manual", split_cols, all_ids[:1]
+
     if n_columns >= 4 and len(all_ids) > 8:
         st.caption(
-            f"{n_columns}열 조합이 많을 때는 **직접 지정**으로 필요한 조합만 선택하는 것을 권장합니다."
+            f"{n_columns}열 조합이 많을 때는 아래 표에서 필요한 조합만 선택하세요."
         )
-    if len(all_ids) < 2:
-        return "auto", split_cols, all_ids[:1]
-    return "auto", split_cols, auto_vals
+
+    selected = _pick_split_table(
+        preview,
+        summary,
+        caption=f"**{label_join}** — 복합 조합 **{len(summary)}**개 (분석할 조합만 체크)",
+        state_key=f"mp_auto_comp_pick_{preview.file_name}_{'_'.join(split_cols)}",
+        recommended=recommended,
+    )
+    return "manual", split_cols, selected
 
 
 def _render_manual_measurement_point_picker(
@@ -1762,9 +2489,7 @@ def _render_auto_measurement_point_picker(
     preview: ExcelColumnPreview,
     candidates: list[dict],
 ) -> tuple[str, list[str], list[str]]:
-    """자동 선정 — 점수 기반 열 추천 + 데이터량 상위 항목."""
-    from src.spc.characteristic_split import point_picker_option_map
-
+    """자동 선정 — 점수 기반 열 추천 + 항목 선택 표."""
     if not candidates:
         st.warning("자동 선정 가능한 구분 열이 없습니다. 직접 지정을 사용하세요.")
         return "none", [], []
@@ -1794,25 +2519,24 @@ def _render_auto_measurement_point_picker(
     summary = list(active.get("summary") or [])
     all_ids = [str(s["point_id"]) for s in summary]
     auto_vals = list(active.get("auto_values") or [])
-    option_map = point_picker_option_map(summary, active_col)
 
     if len(all_ids) < 2:
         st.caption("포인트가 1개이므로 분리 없이 단일 분석합니다.")
-        return "auto", [active_col], all_ids[:1]
+        return "manual", [active_col], all_ids[:1]
 
-    auto_labels = [label for label, pid in option_map.items() if pid in auto_vals]
-    if len(all_ids) > len(auto_vals):
-        st.info(
-            f"**자동 ({active_display} 추천)** — 데이터량 기준 **{len(auto_vals)}개** 선정 "
-            f"(전체 {len(all_ids)}개)\n\n"
-            + "\n".join(f"- {name}" for name in auto_labels)
-        )
-    else:
-        st.caption(
-            f"**자동 ({active_display} 추천)**\n\n"
-            + "\n".join(f"- {name}" for name in auto_labels)
-        )
-    return "auto", [active_col], auto_vals
+    recommended = set(auto_vals)
+    st.info(
+        f"**자동 추천 ({active_display})** — 전체 **{len(all_ids)}**개 항목"
+    )
+
+    selected = _pick_split_table(
+        preview,
+        summary,
+        caption=f"**{active_display}** — 원본 **{len(summary)}**개 항목 (분석할 항목만 체크)",
+        state_key=f"mp_auto_pick_{preview.file_name}_{active_col}",
+        recommended=recommended,
+    )
+    return "manual", [active_col], selected
 
 
 def render_normality_panel(analysis: SpcAnalysisResult, decision: SpcDecisionResult) -> None:
@@ -1998,6 +2722,16 @@ def render_report_downloads(result: SpcPipelineResult) -> None:
         build_comprehensive_pdf,
         report_context,
     )
+    from src.spc_streamlit.session_context import export_cache_is_stale, reset_export_session_state
+
+    if export_cache_is_stale():
+        reset_export_session_state()
+        st.warning(
+            "**1. 데이터 입력**에서 첨부 파일이 바뀌었습니다. "
+            "이전 종합보고서는 사용할 수 없습니다. **공정 안정성 점검 시작** 후 "
+            "보고서를 다시 생성하세요."
+        )
+        return
 
     if result.analysis is None or result.charts is None or result.sample_df is None:
         st.warning("보고서 생성에 필요한 분석 결과가 없습니다.")
@@ -2125,11 +2859,13 @@ def render_summary_table_download(pipe: SpcPipelineResult) -> None:
     from config.settings import OUTPUT_PATH
     from src.spc.characteristic_split import format_split_label
     from src.spc.summary_table_export import iter_leaf_pipeline_results
-    from src.spc_streamlit.report_export import build_multi_target_summary_excel
+    from src.spc_streamlit.report_export import build_multi_target_summary_excel, summary_file_tag
     from src.spc_streamlit.session_context import (
+        export_cache_is_stale,
         invalidate_summary_table_if_stale,
         pipeline_export_fingerprint,
     )
+    from src.spc.path_utils import resolve_nested_output_dir
 
     leaves = iter_leaf_pipeline_results(pipe)
     if not leaves or all(r.analysis is None for r in leaves):
@@ -2137,9 +2873,14 @@ def render_summary_table_download(pipe: SpcPipelineResult) -> None:
         return
 
     downloads_dir = Path.home() / "Downloads"
-    output_dir = Path(OUTPUT_PATH)
+    study = pipe.study_info or (leaves[0].study_info if leaves else {})
+    output_dir = resolve_nested_output_dir(
+        Path(OUTPUT_PATH),
+        process_name=study.get("process") if study.get("process") not in (None, "-") else None,
+        machine_name=study.get("machine") if study.get("machine") not in (None, "-") else None,
+    )
     n = len(leaves)
-    tag = pipe.split_column or "summary"
+    tag = summary_file_tag(pipe)
     split_col = pipe.split_column or ""
     target_labels = [
         format_split_label(leaf.characteristic or "-", split_col)
@@ -2147,6 +2888,17 @@ def render_summary_table_download(pipe: SpcPipelineResult) -> None:
     ]
     current_fp = pipeline_export_fingerprint(pipe)
     invalidate_summary_table_if_stale(current_fp)
+
+    if export_cache_is_stale():
+        from src.spc_streamlit.session_context import clear_summary_table_cache
+
+        clear_summary_table_cache()
+        st.warning(
+            "**1. 데이터 입력**에서 첨부 파일이 바뀌었습니다. "
+            "이전 판정 요약표는 사용할 수 없습니다. **공정 안정성 점검 시작** 후 "
+            "「① 판정 요약표 생성」을 다시 실행하세요."
+        )
+        return
 
     st.subheader("분석 대상별 판정 요약표 (Excel)")
     if st.session_state.pop("_summary_table_stale_notice", False):
@@ -2156,8 +2908,9 @@ def render_summary_table_download(pipe: SpcPipelineResult) -> None:
         )
     st.info(
         f"**{n}개** 분석 대상을 한 장의 표로 정리합니다.\n\n"
-        "포함 항목: **측정항목 · LSL/USL · LCL/CL/UCL · 관리도 유형 · 판정(안정/불안정) · "
-        "Pp/Ppk/Cp/Cpk · 비고**(정규성, R·X bar 관리도 해석)\n\n"
+        "포함 항목: **라인 · 차종 · 공정번호 · 특별특성 · 공정명 · 측정항목 · LSL/USL · "
+        "LCL/CL/UCL · 관리도 유형 · 판정(안정/불안정) · Pp/Ppk/Cp/Cpk · 비고**"
+        "(정규성, R·X bar 관리도 해석)\n\n"
         "1. **「요약표 생성」** → 2. **「PC에 다운로드」** 또는 **output 폴더 저장**\n\n"
         f"output 저장 경로: `{output_dir.resolve()}`"
     )
@@ -2208,7 +2961,7 @@ def render_summary_table_download(pipe: SpcPipelineResult) -> None:
         file_name=fname,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True,
-        key="dl_summary_table",
+        key=f"dl_summary_table_{st.session_state.get(fp_key, current_fp)}_{fname}",
     )
 
     if st.button("③ 판정 요약표 output 폴더에 저장", key="save_summary_table", use_container_width=True):

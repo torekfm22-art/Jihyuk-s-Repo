@@ -39,7 +39,7 @@ COLUMN_ALIASES = {
         "중량", "중량값", "중량 값", "인플레이터중량", "인플레이터 중량",
         "인플레이터 중량값", "무게", "weight", "wt",
     ],
-    "item": ["품목", "품명", "품번", "item", "product", "part_no", "part_number"],
+    "item": ["품목", "품명", "품번", "차종", "item", "product", "part_no", "part_number", "vehicle"],
     "process": ["공정", "공정 코드", "공정코드", "process", "operation", "step"],
     "process_name": ["공정명"],
     "operation": ["작업"],
@@ -51,8 +51,8 @@ COLUMN_ALIASES = {
         "equipment_code", "설비/라인", "machine_name",
     ],
     "characteristic": [
-        "특성", "검사항목", "검사 항목", "characteristic", "spec_item", "항목",
-        "inspection_item", "measure_item",
+        "특성", "검사항목", "검사 항목", "검사명", "characteristic", "spec_item", "항목",
+        "inspection_item", "measure_item", "inspection_name",
     ],
     "measure_item": [
         "측정항목", "측정 항목", "measure_item", "measurement_item", "검사항목명",
@@ -357,6 +357,25 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     rename_map = _column_rename_map(df)
     out = df.rename(columns=rename_map)
     return _coalesce_duplicate_columns(_ensure_measurement_point_column(out))
+
+
+def preview_all_column_resolve(raw_df: pd.DataFrame) -> dict[str, str]:
+    """원본 Excel 헤더 → 정규화 후 분석 DataFrame 컬럼 매핑 (전체 열)."""
+    if raw_df is None or raw_df.empty:
+        return {}
+    rename_map = _column_rename_map(raw_df)
+    normalized = _normalize_columns(raw_df.copy())
+    resolve: dict[str, str] = {}
+    for col in raw_df.columns:
+        raw = str(col).strip()
+        if not raw:
+            continue
+        final = rename_map.get(raw, raw)
+        if final not in normalized.columns and raw in normalized.columns:
+            final = raw
+        if final in normalized.columns:
+            resolve[raw] = final
+    return resolve
 
 
 def preview_boundary_column_options(raw_df: pd.DataFrame) -> tuple[list[str], dict[str, str]]:
@@ -727,6 +746,7 @@ class ExcelColumnPreview:
     manual_value_options: list[str] = field(default_factory=list)
     boundary_column_options: list[str] = field(default_factory=list)
     boundary_column_resolve: dict[str, str] = field(default_factory=dict)
+    column_resolve: dict[str, str] = field(default_factory=dict)
     auto_boundary_columns: list[str] = field(default_factory=list)
     measurement_point_column: str | None = None
     measurement_point_candidates: list[dict] = field(default_factory=list)
@@ -791,6 +811,7 @@ def preview_excel_columns(
         candidates = _suggest_value_columns(df)
         manual_options = list_value_column_choices(df)
         boundary_opts, boundary_map = preview_boundary_column_options(df)
+        column_resolve = preview_all_column_resolve(df)
         norm_df = _normalize_columns(df.copy())
         from src.spc.sampler import resolve_auto_boundary_columns
 
@@ -821,6 +842,7 @@ def preview_excel_columns(
             row_count=len(df),
             boundary_column_options=boundary_opts,
             boundary_column_resolve=boundary_map,
+            column_resolve=column_resolve,
             auto_boundary_columns=auto_display,
             measurement_point_column=mp_col,
             measurement_point_candidates=mp_candidates,

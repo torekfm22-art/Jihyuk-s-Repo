@@ -39,6 +39,105 @@ _REPORT_CACHE_PREFIXES = (
     "pdf_ready_",
 )
 
+_DATA_INPUT_CACHE_PREFIXES = (
+    "workbook_",
+    "manual_split_",
+    "composite_",
+    "group_spec_rows_",
+    "group_spec_excluded_",
+    "group_spec_excluded_norm_",
+    "mp_selected_original_",
+    "group_spec_pick_",
+    "mp_selected_",
+    "mp_comp_pick_",
+    "mp_auto_comp_pick_",
+    "mp_manual_pick_",
+    "mp_auto_pick_",
+    "excel_preview_v2_",
+    "excel_preview_",
+    "norm_df_",
+)
+
+
+def compute_upload_fingerprint(
+    uploads,
+    *,
+    sheet_name: str | int | None = None,
+) -> str:
+    """첨부 파일·시트 기준 세션 서명 (내용 해시 포함)."""
+    parts: list[str] = []
+    for uf in uploads or []:
+        data = uf.getvalue()
+        digest = hashlib.sha256(data).hexdigest()[:20]
+        parts.append(f"{uf.name}:{len(data)}:{digest}")
+    if sheet_name is not None and str(sheet_name).strip() != "":
+        parts.append(f"sheet={sheet_name}")
+    raw = "|".join(sorted(parts))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+def clear_data_input_caches() -> None:
+    """데이터 입력 단계 — Excel·분리·규격 미리보기 캐시 제거."""
+    for key in list(st.session_state.keys()):
+        k = str(key)
+        if any(k.startswith(prefix) for prefix in _DATA_INPUT_CACHE_PREFIXES):
+            st.session_state.pop(key, None)
+        if k.startswith("group_spec_rows_") and k.endswith("_targets"):
+            st.session_state.pop(key, None)
+
+
+def export_cache_is_stale() -> bool:
+    """첨부 데이터 변경 후 분석을 다시 실행하지 않은 상태."""
+    current = st.session_state.get("upload_fingerprint")
+    analyzed = st.session_state.get("analysis_upload_fingerprint")
+    if not current or not analyzed:
+        return bool(current) and not analyzed
+    return current != analyzed
+
+
+def reset_session_for_new_upload(*, keep_upload_fingerprint: str | None = None) -> None:
+    """새 Excel 첨부 — 분석·다운로드·입력 캐시 전부 초기화."""
+    clear_data_input_caches()
+    reset_export_session_state()
+    st.session_state.analysis_done = False
+    st.session_state.bundle = None
+    st.session_state.pop("active_analysis_target", None)
+    st.session_state.pop("auto_summary_path", None)
+    st.session_state.pop("auto_summary_save_err", None)
+    st.session_state.pop("analysis_upload_fingerprint", None)
+    for key in list(st.session_state.keys()):
+        k = str(key)
+        if k.startswith(
+            ("baseline_sample_", "extreme_exclude_", "extreme_mode_", "stratification_")
+        ):
+            st.session_state.pop(key, None)
+    if keep_upload_fingerprint is not None:
+        st.session_state["upload_fingerprint"] = keep_upload_fingerprint
+
+
+def sync_upload_session(
+    uploads,
+    *,
+    sheet_name: str | int | None = None,
+) -> bool:
+    """
+    첨부·시트 변경 감지. 변경 시 캐시 초기화.
+    Returns: True if this is a change from a previous upload (not first load).
+    """
+    fp = compute_upload_fingerprint(uploads, sheet_name=sheet_name)
+    prev = st.session_state.get("upload_fingerprint")
+    if prev == fp:
+        return False
+    reset_session_for_new_upload(keep_upload_fingerprint=fp)
+    return prev is not None
+
+
+def mark_analysis_upload_session() -> None:
+    """분석 성공 직후 — 현재 첨부와 분석 결과를 짝지음."""
+    fp = st.session_state.get("upload_fingerprint")
+    if fp:
+        st.session_state["analysis_upload_fingerprint"] = fp
+
 
 def pipeline_export_fingerprint(pipe: SpcPipelineResult) -> str:
     """결론 Excel 캐시 무효화용 — 분석 대상·표본·판정 기준 서명."""

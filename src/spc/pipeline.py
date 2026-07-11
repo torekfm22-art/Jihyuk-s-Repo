@@ -62,6 +62,8 @@ class SpcJobConfig:
     usl: Optional[float] = None
     lsl: Optional[float] = None
     spec_type: Optional[Literal["two_sided", "upper_only", "lower_only"]] = None
+    per_split_spec: bool = False
+    split_spec_limits: dict[str, tuple[Optional[float], Optional[float]]] = field(default_factory=dict)
     filter_item: Optional[str] = None
     filter_process: Optional[str] = None
     filter_characteristic: Optional[str] = None
@@ -73,6 +75,10 @@ class SpcJobConfig:
     output_dir: Optional[str] = None
     process_name: Optional[str] = None
     machine_name: Optional[str] = None
+    process_number: Optional[str] = None
+    special_characteristic_symbol: Optional[str] = None
+    summary_measurement_column: Optional[str] = None
+    summary_vehicle_column: Optional[str] = None
     stage: Literal[
         "development", "pilot", "pre_mass_production", "mass_production"
     ] = "mass_production"
@@ -159,9 +165,21 @@ class SpcPipeline:
     ) -> tuple[float | None, float | None]:
         from src.spc.spec_limits import resolve_effective_spec_limits
 
+        if label and getattr(cfg, "split_spec_limits", None):
+            pair = cfg.split_spec_limits.get(label)
+            if pair is not None:
+                lsl, usl = pair
+                if usl is None and lsl is None:
+                    raise ValueError(
+                        f"[{label}] USL 또는 LSL 중 최소 하나를 입력하세요."
+                    )
+                return usl, lsl
+
+        cfg_usl = None if cfg.per_split_spec else cfg.usl
+        cfg_lsl = None if cfg.per_split_spec else cfg.lsl
         usl, lsl, _ = resolve_effective_spec_limits(
-            cfg.usl,
-            cfg.lsl,
+            cfg_usl,
+            cfg_lsl,
             filtered,
             spec_type=self._effective_spec_type(cfg),
         )
@@ -331,6 +349,10 @@ class SpcPipeline:
         study_info = {
             "process": cfg.process_name or cfg.filter_process or "-",
             "machine": cfg.machine_name or "-",
+            "process_number": cfg.process_number or "-",
+            "special_symbol": cfg.special_characteristic_symbol or "-",
+            "summary_measurement_column": cfg.summary_measurement_column,
+            "summary_vehicle_column": cfg.summary_vehicle_column,
             "item": cfg.filter_item or (filtered["item"].iloc[0] if "item" in filtered.columns else "-"),
             "characteristic": char_display,
             "data_source": cfg.filter_source or data_source,
@@ -563,6 +585,10 @@ class SpcPipeline:
         study_info = {
             "process": cfg.process_name or cfg.filter_process or "-",
             "machine": cfg.machine_name or "-",
+            "process_number": cfg.process_number or "-",
+            "special_symbol": cfg.special_characteristic_symbol or "-",
+            "summary_measurement_column": cfg.summary_measurement_column,
+            "summary_vehicle_column": cfg.summary_vehicle_column,
             "item": cfg.filter_item or (filtered["item"].iloc[0] if "item" in filtered.columns else "-"),
             "characteristic": char_display,
             "data_source": cfg.filter_source or data_source,

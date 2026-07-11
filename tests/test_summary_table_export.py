@@ -14,6 +14,8 @@ from src.spc.summary_table_export import (
     _build_normality_remark,
     _build_mean_chart_remark,
     _compact_point_refs,
+    _dataframe_column_display_value,
+    _summary_meta_fields,
     build_summary_dataframe,
     build_summary_remarks,
     generate_summary_excel_bytes,
@@ -102,6 +104,47 @@ def test_build_summary_remarks_stable():
     assert "정규" in text
 
 
+def test_summary_columns_order():
+    assert SUMMARY_COLUMNS == [
+        "라인", "차종", "공정번호", "특별특성", "공정명", "측정항목",
+        "LSL", "USL", "LCL", "CL", "UCL", "유형", "판정",
+        "Pp", "Ppk", "Cp", "Cpk", "비고",
+    ]
+
+
+def test_summary_meta_fields_from_inputs_and_columns():
+    df = pd.DataFrame({
+        "vehicle": ["EV6", "EV6"],
+        "measure_name": ["토크", "토크"],
+        "value": [1.0, 1.1],
+    })
+    result = SpcPipelineResult(
+        characteristic="Point_A",
+        split_column="measurement_point",
+        filtered_df=df,
+        study_info={
+            "machine": "Line-1",
+            "process": "조립",
+            "process_number": "P-100",
+            "special_symbol": "CC",
+            "summary_vehicle_column": "vehicle",
+            "summary_measurement_column": "measure_name",
+        },
+    )
+    meta = _summary_meta_fields(result)
+    assert meta["라인"] == "Line-1"
+    assert meta["차종"] == "EV6"
+    assert meta["공정번호"] == "P-100"
+    assert meta["특별특성"] == "CC"
+    assert meta["공정명"] == "조립"
+    assert meta["측정항목"] == "토크"
+
+
+def test_dataframe_column_display_value_missing():
+    assert _dataframe_column_display_value(None, "x") == "-"
+    assert _dataframe_column_display_value(pd.DataFrame({"a": [1]}), "b") == "-"
+
+
 def test_build_summary_dataframe_batch():
     a1 = _make_analysis()
     a2 = _make_analysis(usl=3.0, lsl=0.05)
@@ -114,6 +157,7 @@ def test_build_summary_dataframe_batch():
         analysis=a1,
         decision=d1,
         sample_count=125,
+        study_info={"machine": "L1", "process": "P", "process_number": "01", "special_symbol": "★"},
     )
     child2 = SpcPipelineResult(
         characteristic="Point_B",
@@ -121,6 +165,7 @@ def test_build_summary_dataframe_batch():
         analysis=a2,
         decision=d2,
         sample_count=125,
+        study_info={"machine": "L1", "process": "P", "process_number": "01", "special_symbol": "★"},
     )
     pipe = SpcPipelineResult(
         split_column="measurement_point",
@@ -131,6 +176,9 @@ def test_build_summary_dataframe_batch():
     assert len(df) == 2
     assert list(df.columns) == SUMMARY_COLUMNS
     assert set(df["판정"]) >= {"안정", "불안정"}
+    assert df.iloc[0]["라인"] == "L1"
+    assert df.iloc[0]["공정번호"] == "01"
+    assert df.iloc[0]["특별특성"] == "★"
 
 
 def test_generate_summary_excel_bytes():

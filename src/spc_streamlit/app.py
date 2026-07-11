@@ -48,7 +48,9 @@ from src.spc_streamlit.components import (
     render_validation_panel,
     render_value_column_picker,
     render_spec_limit_picker,
+    render_group_spec_selector,
     render_measurement_point_picker,
+    _split_groups_session_key,
     render_we_table,
     render_data_quality_panel,
     render_value_extreme_panel,
@@ -219,12 +221,15 @@ def _page_data_input() -> None:
     value_column: str | None = None
     preview = None
     sheet_name: str | int | None = None
-    mp_mode = "auto"
+    mp_mode = "none"
     mp_columns: list[str] = []
     mp_values: list[str] = []
     spec_mode = "양측 공차"
     lsl: float | None = None
     usl: float | None = None
+    per_split_spec = False
+    split_spec_limits: dict[str, tuple[float | None, float | None]] = {}
+    preview_path: Path | None = None
 
     if uploads:
         from src.spc.excel_reader import list_sheet_names
@@ -255,6 +260,15 @@ def _page_data_input() -> None:
             elif sheet_names:
                 st.warning(str(sheet_names[0]))
 
+        from src.spc_streamlit.session_context import sync_upload_session
+
+        upload_changed = sync_upload_session(uploads, sheet_name=sheet_name)
+        if upload_changed:
+            st.info(
+                "새 데이터가 첨부되어 **이전 분석·Excel 다운로드 캐시**를 초기화했습니다. "
+                "설정 후 **공정 안정성 점검 시작**을 다시 실행하세요."
+            )
+
         preview_cache_key = f"excel_preview_v2_{uploads[0].name}_{sheet_name}_{len(uploads[0].getvalue())}"
         if preview_cache_key not in st.session_state:
             with st.spinner("파일 미리보기 로딩 중…"):
@@ -272,13 +286,38 @@ def _page_data_input() -> None:
         mp_mode, mp_columns, mp_values = render_measurement_point_picker(
             preview, preview_path=preview_path,
         )
-        spec_mode, lsl, usl = render_spec_limit_picker(
-            preview, file_key=uploads[0].name,
+        if mp_columns:
+            split_sel_key = _split_groups_session_key(uploads[0].name, mp_columns)
+            if split_sel_key in st.session_state:
+                mp_values = list(st.session_state[split_sel_key])
+            elif mp_values:
+                st.session_state[split_sel_key] = mp_values
+        batch_split = mp_mode != "none" and bool(mp_columns)
+        spec_mode, lsl, usl, per_split_spec, split_spec_limits = render_spec_limit_picker(
+            preview,
+            file_key=uploads[0].name,
+            batch_split=batch_split,
+            split_groups=mp_values,
         )
+        if per_split_spec and preview_path is not None and mp_columns:
+            mp_values, auto_group_specs = render_group_spec_selector(
+                preview_path,
+                preview,
+                mp_columns,
+                suggested_values=mp_values,
+            )
+            if auto_group_specs:
+                split_spec_limits = {**split_spec_limits, **auto_group_specs}
+            mp_mode = "manual"
         st.divider()
     else:
         with c1:
             st.caption("Excel을 업로드하면 **시트 목록**이 표시됩니다.")
+        if st.session_state.get("upload_fingerprint"):
+            from src.spc_streamlit.session_context import reset_session_for_new_upload
+
+            reset_session_for_new_upload()
+            st.session_state.pop("upload_fingerprint", None)
 
     with c2:
         st.info(
@@ -292,7 +331,9 @@ def _page_data_input() -> None:
 
     with st.expander("분석 조건", expanded=True):
         if not uploads:
-            spec_mode, lsl, usl = render_spec_limit_picker(None, file_key="no_file")
+            spec_mode, lsl, usl, per_split_spec, split_spec_limits = render_spec_limit_picker(
+                None, file_key="no_file",
+            )
 
         process = st.text_input("공정 필터", placeholder="예: 조립공정")
         characteristic = st.text_input("검사항목 필터", placeholder="비우면 자동 분리")
@@ -376,9 +417,54 @@ def _page_data_input() -> None:
                 st.caption("Excel 업로드 후 Raw data 컬럼 기준 자동 인식 결과가 표시됩니다.")
 
         r10, r11, r12 = st.columns(3)
-        process_name = r10.text_input("공정명 (보고서)", "")
-        machine_name = r11.text_input("설비/라인 (보고서)", "")
+        process_name = r10.text_input("공정명", "")
+        machine_name = r11.text_input("라인명", "")
         process_change = r12.checkbox("공정 변경 감지")
+
+        r13, r14 = st.columns(2)
+        process_number = r13.text_input("공정번호", "")
+        special_symbol = r14.text_input("특별특성(기호)", "")
+
+        summary_column_options: list[str] = []
+        summary_column_resolve: dict[str, str] = {}
+        if preview is not None and not preview.error:
+            summary_column_options = list(preview.columns or [])
+            summary_column_resolve = dict(
+                getattr(preview, "column_resolve", None) or preview.boundary_column_resolve or {}
+            )
+            for col in summary_column_options:
+                summary_column_resolve.setdefault(col, col)
+
+        _none_label = "(선택 안 함)"
+        summary_measure_pick = _none_label
+        summary_vehicle_pick = _none_label
+        if summary_column_options:
+            r15, r16 = st.columns(2)
+            summary_measure_pick = r15.selectbox(
+                "측정항목 — 원본 데이터 열",
+                [_none_label, *summary_column_options],
+                index=0,
+                help="판정 요약표의 측정항목 열에 표시할 원본 데이터 열을 선택합니다.",
+            )
+            summary_vehicle_pick = r16.selectbox(
+                "차종 — 원본 데이터 열",
+                [_none_label, *summary_column_options],
+                index=0,
+                help="판정 요약표의 차종 열에 표시할 원본 데이터 열을 선택합니다.",
+            )
+        elif uploads:
+            st.caption("원본 데이터 열 목록을 불러오는 중이거나 열 정보가 없습니다.")
+
+        summary_measurement_column = None
+        if summary_measure_pick != _none_label:
+            summary_measurement_column = summary_column_resolve.get(
+                summary_measure_pick, summary_measure_pick
+            )
+        summary_vehicle_column = None
+        if summary_vehicle_pick != _none_label:
+            summary_vehicle_column = summary_column_resolve.get(
+                summary_vehicle_pick, summary_vehicle_pick
+            )
 
         if not uploads:
             st.info("Excel 파일을 업로드하면 **측정값 후보 열** 목록이 위에 표시됩니다.")
@@ -387,20 +473,40 @@ def _page_data_input() -> None:
         if not uploads:
             st.error("Excel 파일을 업로드하세요.")
             return
-        if spec_mode == "양측 공차" and lsl is not None and usl is not None and lsl >= usl:
-            st.error("양측 공차: LSL은 USL보다 작아야 합니다.")
-            return
-        if spec_mode == "편측 — 상한치" and usl is None:
-            st.error("상한치(USL)를 입력하세요.")
-            return
-        if spec_mode == "편측 — 하한치" and lsl is None:
-            st.error("하한치(LSL)를 입력하세요.")
-            return
+        if split_spec_limits or (per_split_spec and mp_values):
+            if not mp_values:
+                st.error("데이터 분리 — 분석할 항목(그룹)을 1개 이상 선택하세요.")
+                return
+            check_specs = split_spec_limits
+            if per_split_spec and not check_specs:
+                check_specs = {g: (None, None) for g in mp_values}
+            for g in mp_values:
+                pair = check_specs.get(g)
+                if pair is None or (pair[0] is None and pair[1] is None):
+                    st.error(f"그룹 `{g}` — LSL 또는 USL을 입력하세요.")
+                    return
+                glsl, gusl = pair
+                if glsl is not None and gusl is not None and glsl >= gusl:
+                    st.error(f"그룹 `{g}` — LSL은 USL보다 작아야 합니다.")
+                    return
+        elif not per_split_spec:
+            if spec_mode == "양측 공차" and lsl is not None and usl is not None and lsl >= usl:
+                st.error("양측 공차: LSL은 USL보다 작아야 합니다.")
+                return
+            if spec_mode == "편측 — 상한치" and usl is None:
+                st.error("상한치(USL)를 입력하세요.")
+                return
+            if spec_mode == "편측 — 하한치" and lsl is None:
+                st.error("하한치(LSL)를 입력하세요.")
+                return
         if boundary_mode_label == "직접 지정" and not manual_boundary_columns:
             st.error("Subgroup 구성 조건(Raw data 컬럼)을 1개 이상 선택하세요.")
             return
         if mp_mode == "manual" and not mp_values:
-            st.error("측정 포인트를 1개 이상 선택하세요.")
+            st.error("데이터 분리 — 분석할 항목(그룹)을 1개 이상 선택하세요.")
+            return
+        if per_split_spec and not mp_values:
+            st.error("그룹별 규격 확인 후 분석할 그룹이 없습니다.")
             return
         boundary_mode = "manual" if boundary_mode_label == "직접 지정" else "auto"
         boundary_columns_display = list(manual_boundary_columns) if boundary_mode == "manual" else []
@@ -414,6 +520,14 @@ def _page_data_input() -> None:
                 p = Path(tmp) / uf.name
                 p.write_bytes(uf.getvalue())
                 paths.append(p)
+            from config.settings import OUTPUT_PATH
+            from src.spc.path_utils import resolve_nested_output_dir
+
+            analysis_output_dir = resolve_nested_output_dir(
+                Path(OUTPUT_PATH),
+                process_name=process_name or None,
+                machine_name=machine_name or None,
+            )
             try:
                 bundle = run_spc_analysis(
                     paths,
@@ -432,6 +546,10 @@ def _page_data_input() -> None:
                     stage=STAGE_MAP[stage_label],
                     process_name=process_name or None,
                     machine_name=machine_name or None,
+                    process_number=process_number or None,
+                    special_characteristic_symbol=special_symbol or None,
+                    summary_measurement_column=summary_measurement_column,
+                    summary_vehicle_column=summary_vehicle_column,
                     process_change_detected=process_change,
                     sheet_name=sheet_name,
                     value_column=value_column,
@@ -439,6 +557,9 @@ def _page_data_input() -> None:
                     measurement_point_column=mp_columns[0] if len(mp_columns) == 1 else None,
                     measurement_point_columns=mp_columns if len(mp_columns) >= 2 else None,
                     measurement_point_values=mp_values,
+                    per_split_spec=per_split_spec,
+                    split_spec_limits=split_spec_limits,
+                    output_dir=analysis_output_dir,
                 )
                 st.session_state.bundle = bundle
                 st.session_state.analysis_done = True
@@ -446,12 +567,14 @@ def _page_data_input() -> None:
                 st.session_state.nav_step = "data_analysis"
                 from src.spc_streamlit.analysis_runner import list_analysis_targets
                 from src.spc_streamlit.session_context import (
+                    mark_analysis_upload_session,
                     reset_analysis_targets,
                     reset_extreme_value_session,
                     reset_export_session_state,
                 )
 
                 reset_export_session_state()
+                mark_analysis_upload_session()
                 reset_analysis_targets(list_analysis_targets(bundle.pipeline))
                 reset_extreme_value_session(bundle.pipeline)
                 st.rerun()
